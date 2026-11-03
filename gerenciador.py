@@ -15,6 +15,15 @@ APAGADO = (0, 0, 0)
 log = logging.getLogger(__name__)
 
 
+def _indice(duracoes, t):
+    """Índice do passo em que o instante t (0 <= t < soma das durações) cai."""
+    for i, seg in enumerate(duracoes):
+        if t < seg:
+            return i
+        t -= seg
+    return len(duracoes) - 1  # arredondamento no fim do ciclo
+
+
 class Estado:
     def __init__(self):
         self.rgb = APAGADO
@@ -23,23 +32,49 @@ class Estado:
         self.forte = 0
         self.fraco = 0
         self.vibra_ate = 0.0
+        self.padrao = []           # padrão de vibração: [(forte, fraco, segundos), ...]
+        self.padrao_inicio = None  # None = padrão parado
+        self.padrao_repetir = False
+
+    def passo_do_padrao(self, agora):
+        """Índice do passo do padrão neste instante, ou None se ele está parado ou acabou."""
+        if self.padrao_inicio is None:
+            return None
+        duracoes = [seg for _, _, seg in self.padrao]
+        total = sum(duracoes)
+        t = agora - self.padrao_inicio
+        if total <= 0 or (t >= total and not self.padrao_repetir):
+            return None
+        return _indice(duracoes, t % total)
+
+    def motores_do_padrao(self, agora):
+        """(forte, fraco) do padrão neste instante, ou None se ele acabou."""
+        i = self.passo_do_padrao(agora)
+        if i is None:
+            self.padrao_inicio = None
+            return None
+        return self.padrao[i][:2]
+
+    def passo_da_sequencia(self, agora):
+        """Índice do passo do pisca neste instante, ou None sem pisca."""
+        duracoes = [seg for _, seg in self.passos]
+        if self.pisca_inicio is None or sum(duracoes) <= 0:
+            return None
+        return _indice(duracoes, (agora - self.pisca_inicio) % sum(duracoes))
 
     def cor_da_sequencia(self, agora):
-        total = sum(seg for _, seg in self.passos)
-        if total <= 0:
-            return self.rgb
-        t = (agora - self.pisca_inicio) % total
-        for cor, seg in self.passos:
-            if t < seg:
-                return cor
-            t -= seg
-        return self.passos[-1][0]  # arredondamento no fim do ciclo
+        i = self.passo_da_sequencia(agora)
+        return self.rgb if i is None else self.passos[i][0]
 
     def saida(self, agora):
         """O que o controle deve mostrar neste instante: (rgb, forte, fraco)."""
         rgb = self.rgb
         if self.pisca_inicio is not None and self.passos:
             rgb = self.cor_da_sequencia(agora)
+        if self.padrao_inicio is not None:
+            motores = self.motores_do_padrao(agora)
+            if motores:
+                return (rgb, *motores)
         if agora < self.vibra_ate:
             return rgb, self.forte, self.fraco
         return rgb, 0, 0
@@ -62,6 +97,7 @@ class Gerenciador:
         with self._trava:
             self._estado.pisca_inicio = None
             self._estado.vibra_ate = 0.0
+            self._estado.padrao_inicio = None
         self._parar.set()
         self._thread.join(timeout=2)
 
@@ -86,13 +122,38 @@ class Gerenciador:
 
     def vibrar(self, forte, fraco, segundos):
         with self._trava:
+            self._estado.padrao_inicio = None
             self._estado.forte = forte
             self._estado.fraco = fraco
             self._estado.vibra_ate = time.monotonic() + segundos
 
+    def padrao_vibracao(self, passos):
+        """Define o padrão: [(forte, fraco, segundos), ...]. Não reinicia um padrão em andamento."""
+        with self._trava:
+            self._estado.padrao = [(int(f), int(r), float(s)) for f, r, s in passos]
+
+    def tocar_padrao(self, repetir):
+        """Toca o padrão do início; uma vez, ou em ciclo até parar_vibracao() se repetir."""
+        with self._trava:
+            self._estado.vibra_ate = 0.0
+            self._estado.padrao_repetir = repetir
+            self._estado.padrao_inicio = time.monotonic()
+
+    def repetir_padrao(self, repetir):
+        with self._trava:
+            self._estado.padrao_repetir = repetir
+
     def parar_vibracao(self):
         with self._trava:
             self._estado.vibra_ate = 0.0
+            self._estado.padrao_inicio = None
+
+    def andamento(self):
+        """(passo do pisca, passo do padrão, vibração simples ativa) agora, para a GUI mostrar."""
+        agora = time.monotonic()
+        with self._trava:
+            e = self._estado
+            return e.passo_da_sequencia(agora), e.passo_do_padrao(agora), agora < e.vibra_ate
 
     def _loop(self):
         ds4 = None

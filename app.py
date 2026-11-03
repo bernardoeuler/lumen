@@ -93,6 +93,11 @@ def sequencia_para_envio(passos, ligada, cor_base):
     return saida
 
 
+def segundos(s):
+    """Duração curta para o rótulo de um passo: 0.5 -> '0,5 s'."""
+    return f"{round(s, 2):g} s".replace(".", ",")
+
+
 def contorno(rgb):
     """Cor de borda que aparece tanto em cores claras quanto escuras."""
     return wx.Colour(*(int(c * 0.6) for c in rgb)) if sum(rgb) > 300 else wx.Colour(0, 0, 0, 60)
@@ -225,23 +230,71 @@ def desenhar_bolinha(gc, x, y, d, rgb, alfa=255):
     gc.DrawEllipse(x, y, d, d)
 
 
-class Faixa(wx.Control):
-    """Sequência do pisca como uma fileira de bolinhas.
+def desenhar_vibracao(gc, x, y, d, forte, fraco, alfa=255):
+    """Bolinha neutra com duas barras: esquerda = motor forte, direita = motor fraco (0..255)."""
+    fundo = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
+    borda = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNSHADOW)
+    gc.SetPen(wx.Pen(wx.Colour(borda.Red(), borda.Green(), borda.Blue(), alfa), 1))
+    gc.SetBrush(wx.Brush(wx.Colour(fundo.Red(), fundo.Green(), fundo.Blue(), alfa)))
+    gc.DrawEllipse(x, y, d, d)
+    barra = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
+    gc.SetPen(wx.TRANSPARENT_PEN)
+    gc.SetBrush(wx.Brush(wx.Colour(barra.Red(), barra.Green(), barra.Blue(), alfa)))
+    largura, vao = d * 0.2, d * 0.1
+    base, altura_max = y + d * 0.8, d * 0.6
+    for i, valor in enumerate((forte, fraco)):
+        bx = x + d / 2 - vao / 2 - largura + i * (largura + vao)
+        h = max(1.0, altura_max * valor / 255)  # parado aparece como um traço
+        gc.DrawRoundedRectangle(bx, base - h, largura, h, min(largura / 2, h / 2))
 
+
+class Miniatura(wx.Control):
+    """Desenho fixo de um item (usado no topo do balão de detalhe)."""
+
+    def __init__(self, pai, desenhar):
+        super().__init__(pai, size=pai.FromDIP(wx.Size(30, 30)), style=wx.BORDER_NONE)
+        self.desenhar = desenhar  # (gc, x, y, d)
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self.on_paint)
+
+    def DoGetBestSize(self):
+        return self.FromDIP(wx.Size(30, 30))
+
+    def on_paint(self, _):
+        dc = wx.AutoBufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        gc = wx.GraphicsContext.Create(dc)
+        folga = self.FromDIP(4)
+        d = min(self.GetClientSize()) - 2 * folga
+        self.desenhar(gc, folga, folga, d)
+
+
+class Faixa(wx.Control):
+    """Sequência como uma fileira de bolinhas (cores do pisca ou passos da vibração).
+
+    Cada passo mostra a duração embaixo; o passo que está tocando no controle fica destacado.
     Clique numa bolinha abre o detalhe dela; arrastar muda a ordem; a última bolinha ('+') adiciona.
-    A lista `passos` ([r, g, b, segundos]) é a mesma da janela, compartilhada.
+    `itens` é a lista do editor, compartilhada; `desenhar(gc, x, y, d, item, alfa)` desenha um item,
+    `dica(item)` dá o texto ao passar o mouse e `rotulo(item)` o texto embaixo dele.
     """
 
     POR_LINHA = 9
     LIMIAR_ARRASTO = 4  # px que o mouse precisa andar para virar arrasto
+    AJUDA = "Clique para editar · arraste para mudar a ordem"
 
-    def __init__(self, pai, passos, ao_clicar, ao_mover, ao_adicionar):
+    def __init__(self, pai, itens, desenhar, dica, rotulo, dica_adicionar, ao_clicar, ao_mover, ao_adicionar):
         super().__init__(pai, style=wx.BORDER_NONE)
-        self.passos = passos
-        self.ao_clicar = ao_clicar        # (indice, retangulo_na_tela)
+        self.itens = itens
+        self.desenhar = desenhar
+        self.dica = dica
+        self.rotulo = rotulo
+        self.dica_adicionar = dica_adicionar
+        self.ao_clicar = ao_clicar        # (indice)
         self.ao_mover = ao_mover          # (origem, posicao_de_insercao)
         self.ao_adicionar = ao_adicionar  # (retangulo_na_tela)
         self.selecionado = None
+        self.tocando = None               # passo que está no controle agora
         self.sobre = None
         self.pressionado = None           # índice onde o botão foi apertado
         self.inicio_arrasto = None
@@ -256,48 +309,67 @@ class Faixa(wx.Control):
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, lambda e: self._cancelar())
         self.Bind(wx.EVT_LEAVE_WINDOW, lambda e: self._definir_sobre(None))
 
+    # célula de cada passo: bolinha em cima, duração embaixo
     @property
-    def tam(self):
-        return self.FromDIP(32)
+    def cw(self):
+        return self.FromDIP(40)
+
+    @property
+    def ch(self):
+        return self.FromDIP(46)
+
+    @property
+    def d(self):
+        return self.FromDIP(24)
 
     def _n(self):
-        return len(self.passos) + 1  # + a bolinha de adicionar
+        return len(self.itens) + 1  # + a bolinha de adicionar
 
     def DoGetBestSize(self):
         linhas = (self._n() + self.POR_LINHA - 1) // self.POR_LINHA
-        return wx.Size(self.POR_LINHA * self.tam, linhas * self.tam)
+        return wx.Size(self.POR_LINHA * self.cw, linhas * self.ch)
 
     def atualizar(self):
         self.InvalidateBestSize()
         self.Refresh()
 
+    def tocar(self, i):
+        if i != self.tocando:
+            self.tocando = i
+            self.Refresh()
+
     def _ret(self, i):
         linha, col = divmod(i, self.POR_LINHA)
-        return wx.Rect(col * self.tam, linha * self.tam, self.tam, self.tam)
+        return wx.Rect(col * self.cw, linha * self.ch, self.cw, self.ch)
+
+    def _bolinha(self, i):
+        """(x, y) do canto da bolinha do passo i."""
+        r = self._ret(i)
+        return r.x + (self.cw - self.d) / 2, r.y + self.FromDIP(5)
 
     def _indice_em(self, pt):
-        col, linha = pt.x // self.tam, pt.y // self.tam
+        col, linha = pt.x // self.cw, pt.y // self.ch
         i = linha * self.POR_LINHA + col
         return i if 0 <= col < self.POR_LINHA and 0 <= i < self._n() else None
 
     def _insercao(self, pt):
         """Posição (0..len) onde o item arrastado entraria se soltasse em pt."""
-        linhas = max(1, (len(self.passos) + self.POR_LINHA - 1) // self.POR_LINHA)
-        linha = max(0, min(linhas - 1, pt.y // self.tam))
-        col = max(0, min(self.POR_LINHA, round(pt.x / self.tam)))
-        return max(0, min(len(self.passos), linha * self.POR_LINHA + col))
+        linhas = max(1, (len(self.itens) + self.POR_LINHA - 1) // self.POR_LINHA)
+        linha = max(0, min(linhas - 1, pt.y // self.ch))
+        col = max(0, min(self.POR_LINHA, round(pt.x / self.cw)))
+        return max(0, min(len(self.itens), linha * self.POR_LINHA + col))
 
-    def _na_tela(self, i):
+    def na_tela(self, i):
         r = self._ret(i)
         return wx.Rect(self.ClientToScreen(r.GetTopLeft()), r.GetSize())
 
     def _definir_sobre(self, i):
         if i != self.sobre:
             self.sobre = i
-            if i is not None and i < len(self.passos):
-                self.SetToolTip(f"{self.passos[i][3]:.2f} s")
+            if i is not None and i < len(self.itens):
+                self.SetToolTip(f"{self.dica(self.itens[i])}\n{self.AJUDA}")
             else:
-                self.SetToolTip("Adicionar cor ou pausa" if i is not None else None)
+                self.SetToolTip(self.dica_adicionar if i is not None else None)
             self.Refresh()
 
     def on_down(self, ev):
@@ -306,12 +378,12 @@ class Faixa(wx.Control):
             return
         self.pressionado = i
         self.inicio_arrasto = ev.GetPosition()
-        if i < len(self.passos):
+        if i < len(self.itens):
             self.CaptureMouse()
 
     def on_motion(self, ev):
         self.mouse = ev.GetPosition()
-        if self.pressionado is None or self.pressionado >= len(self.passos) or not ev.LeftIsDown():
+        if self.pressionado is None or self.pressionado >= len(self.itens) or not ev.LeftIsDown():
             self._definir_sobre(self._indice_em(self.mouse))
             return
         if not self.arrastando:
@@ -332,10 +404,10 @@ class Faixa(wx.Control):
         if arrastando:
             self.ao_mover(i, destino)
         elif self._indice_em(ev.GetPosition()) == i:
-            if i < len(self.passos):
-                self.ao_clicar(i, self._na_tela(i))
+            if i < len(self.itens):
+                self.ao_clicar(i)
             else:
-                self.ao_adicionar(self._na_tela(i))
+                self.ao_adicionar(self.na_tela(i))
 
     def _cancelar(self):
         if self.HasCapture():
@@ -349,33 +421,42 @@ class Faixa(wx.Control):
         dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
         dc.Clear()
         gc = wx.GraphicsContext.Create(dc)
-        tam = self.tam
-        folga = self.FromDIP(4)
+        d = self.d
         anel = self.FromDIP(2)
+        folga = self.FromDIP(3)  # entre a bolinha e o anel de seleção
         destaque = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
+        cinza = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        fonte = self.GetFont().Smaller()
 
-        for i, (r, g, b, _) in enumerate(self.passos):
-            x, y = self._ret(i).GetTopLeft()
+        for i, item in enumerate(self.itens):
+            r = self._ret(i)
+            x, y = self._bolinha(i)
+            if i == self.tocando and not self.arrastando:
+                # fundo suave na célula do passo que está no controle agora
+                gc.SetPen(wx.TRANSPARENT_PEN)
+                gc.SetBrush(wx.Brush(wx.Colour(destaque.Red(), destaque.Green(), destaque.Blue(), 45)))
+                gc.DrawRoundedRectangle(r.x + 1, r.y + 1, r.width - 2, r.height - 2, self.FromDIP(6))
             if i in (self.selecionado, self.sobre) and not self.arrastando:
                 alfa = 255 if i == self.selecionado else 110
                 gc.SetPen(wx.Pen(wx.Colour(destaque.Red(), destaque.Green(), destaque.Blue(), alfa), anel))
                 gc.SetBrush(wx.TRANSPARENT_BRUSH)
-                gc.DrawEllipse(x + anel / 2, y + anel / 2, tam - anel, tam - anel)
+                gc.DrawEllipse(x - folga, y - folga, d + 2 * folga, d + 2 * folga)
             # o item sendo arrastado fica "fantasma" no lugar de origem
             alfa = 70 if self.arrastando and i == self.pressionado else 255
-            desenhar_bolinha(gc, x + folga, y + folga, tam - 2 * folga, (r, g, b), alfa)
+            self.desenhar(gc, x, y, d, item, alfa)
+            texto = self.rotulo(item)
+            gc.SetFont(fonte, destaque if i == self.tocando else cinza)
+            tw, _ = gc.GetTextExtent(texto)
+            gc.DrawText(texto, r.x + (r.width - tw) / 2, y + d + self.FromDIP(4))
 
         # bolinha de adicionar: contorno tracejado com '+'
-        x, y = self._ret(len(self.passos)).GetTopLeft()
-        cinza = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
-        if self.sobre == len(self.passos):
-            cinza = destaque
-        caneta = wx.Pen(cinza, self.FromDIP(1), wx.PENSTYLE_SHORT_DASH)
-        gc.SetPen(caneta)
+        x, y = self._bolinha(len(self.itens))
+        cor = destaque if self.sobre == len(self.itens) else cinza
+        gc.SetPen(wx.Pen(cor, self.FromDIP(1), wx.PENSTYLE_SHORT_DASH))
         gc.SetBrush(wx.TRANSPARENT_BRUSH)
-        gc.DrawEllipse(x + folga, y + folga, tam - 2 * folga, tam - 2 * folga)
-        c, braco = tam / 2, tam / 5
-        gc.SetPen(wx.Pen(cinza, self.FromDIP(2)))
+        gc.DrawEllipse(x, y, d, d)
+        c, braco = d / 2, d / 4
+        gc.SetPen(wx.Pen(cor, self.FromDIP(2)))
         mais = gc.CreatePath()
         mais.MoveToPoint(x + c - braco, y + c)
         mais.AddLineToPoint(x + c + braco, y + c)
@@ -387,58 +468,43 @@ class Faixa(wx.Control):
             # barra onde o item vai entrar + o item seguindo o mouse
             pos = self._insercao(self.mouse)
             linha, col = divmod(pos, self.POR_LINHA)
-            if col == 0 and pos > 0 and pos == len(self.passos) and pos % self.POR_LINHA == 0:
+            if col == 0 and pos > 0 and pos == len(self.itens) and pos % self.POR_LINHA == 0:
                 linha, col = linha - 1, self.POR_LINHA
-            bx, by = col * tam, linha * tam
+            bx, by = col * self.cw, linha * self.ch + self.FromDIP(5)
             gc.SetPen(wx.Pen(destaque, self.FromDIP(3)))
-            gc.StrokeLine(bx, by + folga, bx, by + tam - folga)
-            r, g, b, _ = self.passos[self.pressionado]
-            d = tam - 2 * folga
-            desenhar_bolinha(gc, self.mouse.x - d / 2, self.mouse.y - d / 2, d, (r, g, b), 200)
+            gc.StrokeLine(bx, by, bx, by + d)
+            self.desenhar(gc, self.mouse.x - d / 2, self.mouse.y - d / 2, d, self.itens[self.pressionado], 200)
 
 
-class DetalhePasso(wx.PopupTransientWindow):
-    """Balão com o detalhe de uma cor da sequência: trocar cor, duração, ordem e remover."""
+class DetalhePasso(wx.Frame):
+    """Balão com o detalhe de um passo da sequência.
 
-    def __init__(self, janela, i):
-        super().__init__(janela, wx.BORDER_SIMPLE)
-        self.janela = janela
-        self.i = i
-        r, g, b, seg = janela.passos[i]
-        rgb = (r, g, b)
+    O topo e os campos vêm do editor (`preencher(balao, painel, raiz, i)`); os botões de ordem,
+    duplicar e remover são comuns. É uma janela sem moldura, e não um PopupTransientWindow, porque
+    no Windows o popup não recebe o teclado (os campos só mudavam pelas setinhas). Fecha ao perder
+    o foco ou com Esc.
+    """
+
+    def __init__(self, editor, i):
+        super().__init__(editor.janela, style=wx.FRAME_NO_TASKBAR | wx.FRAME_FLOAT_ON_PARENT | wx.BORDER_SIMPLE)
+        self.editor = editor
+        self.fechado = False
+        self.Bind(wx.EVT_ACTIVATE, lambda ev: ev.GetActive() or self.fechar())
+        self.Bind(wx.EVT_CHAR_HOOK, lambda ev: self.fechar() if ev.GetKeyCode() == wx.WXK_ESCAPE else ev.Skip())
         e = self.FromDIP(6)
 
         painel = wx.Panel(self)
         painel.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW))
         raiz = wx.BoxSizer(wx.VERTICAL)
+        editor.preencher(self, painel, raiz, i)
 
-        topo = wx.BoxSizer(wx.HORIZONTAL)
-        dica = "Trocar por uma cor" if rgb == APAGADO else "Trocar a cor"
-        topo.Add(Bolinha(painel, rgb, dica, lambda _: self._acao(janela.trocar_cor_passo, i)),
-                 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
-        titulo = wx.StaticText(painel, label=f"Passo {i + 1} de {len(janela.passos)}")
-        titulo.SetFont(titulo.GetFont().Bold())
-        texto = wx.BoxSizer(wx.VERTICAL)
-        texto.Add(titulo)
-        sub = wx.StaticText(painel, label="Pausa (apagada)" if rgb == APAGADO else "#{:02X}{:02X}{:02X}".format(*rgb))
-        sub.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT))
-        texto.Add(sub)
-        topo.Add(texto, 0, wx.ALIGN_CENTER_VERTICAL)
-        raiz.Add(topo, 0, wx.ALL, e)
-
-        linha = wx.BoxSizer(wx.HORIZONTAL)
-        linha.Add(wx.StaticText(painel, label="Duração"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
-        spin = janela._spin(painel, seg, 0.05, 10.0, 0.05)
-        spin.Bind(wx.EVT_SPINCTRLDOUBLE, lambda ev: janela.mudar_tempo_passo(i, ev.GetValue()))
-        linha.Add(spin, 0, wx.RIGHT, self.FromDIP(2))
-        linha.Add(wx.StaticText(painel, label="s"), 0, wx.ALIGN_CENTER_VERTICAL)
-        raiz.Add(linha, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
-
+        n = len(editor.itens)
         linha = wx.BoxSizer(wx.HORIZONTAL)
         for rotulo, acao, ativo in (
-            ("Antes", lambda ev: self._acao(janela.mover_passo, i, -1), i > 0),
-            ("Depois", lambda ev: self._acao(janela.mover_passo, i, +1), i < len(janela.passos) - 1),
-            ("Remover", lambda ev: self._acao(janela.remover_passo, i), True),
+            ("Antes", lambda ev: self.acao(editor.mover, i, -1), i > 0),
+            ("Depois", lambda ev: self.acao(editor.mover, i, +1), i < n - 1),
+            ("Duplicar", lambda ev: self.acao(editor.duplicar, i), True),
+            ("Remover", lambda ev: self.acao(editor.remover, i), True),
         ):
             bt = wx.Button(painel, label=rotulo, style=wx.BU_EXACTFIT)
             bt.Bind(wx.EVT_BUTTON, acao)
@@ -450,18 +516,135 @@ class DetalhePasso(wx.PopupTransientWindow):
         raiz.Fit(painel)
         self.SetClientSize(painel.GetSize())
 
-    def _acao(self, funcao, *args):
+    @staticmethod
+    def titulo(painel, raiz, miniatura, titulo, subtitulo):
+        """Topo padrão: miniatura + título em negrito + subtítulo cinza."""
+        e = painel.FromDIP(6)
+        topo = wx.BoxSizer(wx.HORIZONTAL)
+        topo.Add(miniatura, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
+        texto = wx.BoxSizer(wx.VERTICAL)
+        t = wx.StaticText(painel, label=titulo)
+        t.SetFont(t.GetFont().Bold())
+        texto.Add(t)
+        s = wx.StaticText(painel, label=subtitulo)
+        s.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT))
+        texto.Add(s)
+        topo.Add(texto, 0, wx.ALIGN_CENTER_VERTICAL)
+        raiz.Add(topo, 0, wx.ALL, e)
+
+    def acao(self, funcao, *args):
         # fecha o balão antes: a ação pode abrir um diálogo ou remontar a sequência
         self.fechar()
         wx.CallAfter(funcao, *args)
 
-    def fechar(self):
-        # Dismiss() feito pelo código não chama OnDismiss (só o clique fora chama)
-        self.Dismiss()
-        self.OnDismiss()
+    def Position(self, ponto, folga, altura_item=0):
+        """Abre abaixo do item; se não couber na tela, acima dele (como o PopupTransientWindow)."""
+        tela = wx.Display(wx.Display.GetFromPoint(ponto)).GetClientArea()
+        w, h = self.GetSize()
+        x = max(tela.x, min(ponto.x, tela.Right - w))
+        y = ponto.y + folga.height
+        if y + h > tela.Bottom:
+            y = ponto.y - altura_item - folga.height - h
+        self.Move(x, max(tela.y, y))
 
-    def OnDismiss(self):
-        self.janela.detalhe_fechado(self)
+    def Popup(self):
+        self.Show()
+        self.Raise()
+
+    def fechar(self):
+        if self.fechado:
+            return
+        self.fechado = True
+        self.Hide()
+        self.editor.detalhe_fechado(self)
+
+
+class EditorSequencia:
+    """Liga uma lista de passos à sua Faixa e ao balão de detalhe (usado pelo pisca e pela vibração).
+
+    itens: lista de passos (listas), alterada no lugar.
+    preencher(balao, painel, raiz, i): monta o topo e os campos do detalhe do passo i.
+    novos: [(rótulo, fábrica)] do menu do '+'; a fábrica devolve o novo passo ou None (cancelado).
+    ao_mudar(): chamado depois de qualquer alteração (aplicar no controle e salvar).
+    """
+
+    def __init__(self, janela, pai, itens, desenhar, dica, rotulo, dica_adicionar, preencher, novos, ao_mudar):
+        self.janela = janela
+        self.itens = itens
+        self.preencher = preencher
+        self.novos = novos
+        self.ao_mudar = ao_mudar
+        self.detalhe = None
+        self.faixa = Faixa(pai, itens, desenhar, dica, rotulo, dica_adicionar,
+                           self.abrir_detalhe, self.arrastar, self.menu_adicionar)
+
+    def alterar(self):
+        self.faixa.atualizar()
+        self.janela.reajustar()  # a faixa ganha outra fileira a cada 9 itens
+        self.ao_mudar()
+
+    def mudar_campo(self, i, campo, valor):
+        """Muda um campo do passo i (ex.: a duração) sem remontar nada."""
+        self.itens[i][campo] = valor
+        self.faixa.Refresh()
+        self.ao_mudar()
+
+    def abrir_detalhe(self, i):
+        if self.detalhe:
+            self.detalhe.fechar()
+        self.detalhe = DetalhePasso(self, i)
+        ret = self.faixa.na_tela(i)
+        self.detalhe.Position(ret.GetBottomLeft(), wx.Size(0, self.faixa.FromDIP(2)), ret.height)
+        self.faixa.selecionado = i
+        self.faixa.Refresh()
+        self.detalhe.Popup()
+
+    def reabrir(self, i):
+        if 0 <= i < len(self.itens):
+            self.abrir_detalhe(i)
+
+    def detalhe_fechado(self, detalhe):
+        if detalhe is self.detalhe:
+            self.detalhe = None
+            self.faixa.selecionado = None
+            self.faixa.Refresh()
+        wx.CallAfter(detalhe.Destroy)
+
+    def menu_adicionar(self, ret_na_tela):
+        menu = wx.Menu()
+        for rotulo, fabrica in self.novos:
+            item = menu.Append(wx.ID_ANY, rotulo)
+            self.janela.Bind(wx.EVT_MENU, lambda ev, f=fabrica: self.adicionar(f()), item)
+        self.faixa.PopupMenu(menu, self.faixa.ScreenToClient(ret_na_tela.GetBottomLeft()))
+        menu.Destroy()
+
+    def adicionar(self, passo):
+        if passo is not None:
+            self.itens.append(list(passo))
+            self.alterar()
+
+    def arrastar(self, origem, insercao):
+        """Solta o passo `origem` na posição `insercao` (0..len, contada antes de tirá-lo)."""
+        destino = insercao - 1 if insercao > origem else insercao
+        if destino != origem:
+            self.itens.insert(destino, self.itens.pop(origem))
+            self.alterar()
+
+    def mover(self, i, delta):
+        j = i + delta
+        self.itens[i], self.itens[j] = self.itens[j], self.itens[i]
+        self.alterar()
+        self.reabrir(j)  # o detalhe acompanha o passo na nova posição
+
+    def duplicar(self, i):
+        """Insere uma cópia logo depois e abre o detalhe da cópia."""
+        self.itens.insert(i + 1, list(self.itens[i]))
+        self.alterar()
+        self.reabrir(i + 1)
+
+    def remover(self, i):
+        del self.itens[i]
+        self.alterar()
 
 
 class IconeBandeja(wx.adv.TaskBarIcon):
@@ -541,23 +724,25 @@ class Janela(wx.Frame):
         # --- pisca: sequência de cores em ciclo, como fileira de bolinhas
         # cada passo: [r, g, b, segundos]; (0, 0, 0) é uma pausa com a luz apagada
         self.passos = [list(p) for p in cfg["sequencia"]]
-        self.detalhe = None
         linha = wx.BoxSizer(wx.HORIZONTAL)
         self.chk_piscar = wx.CheckBox(cx, label="Piscar", size=cx.FromDIP(wx.Size(78, -1)))
         self.chk_piscar.SetValue(cfg["piscar"])
         self.chk_piscar.Bind(wx.EVT_CHECKBOX, lambda ev: self.aplicar_pisca())
         # alinhado ao centro da primeira fileira de bolinhas
         linha.Add(self.chk_piscar, 0, wx.TOP, self.FromDIP(8))
-        self.faixa = Faixa(cx, self.passos, self.abrir_detalhe, self.arrastar_passo, self.menu_adicionar)
-        linha.Add(self.faixa)
-        caixa.Add(linha, 0, wx.LEFT | wx.RIGHT, e)
-        dica = wx.StaticText(cx, label="Clique numa cor para editar; arraste para mudar a ordem.")
-        dica.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT))
-        dica.SetFont(dica.GetFont().Smaller())
-        recuo = wx.BoxSizer(wx.HORIZONTAL)  # alinha a dica com a faixa, sem afetar a margem de baixo
-        recuo.AddSpacer(self.FromDIP(78))
-        recuo.Add(dica)
-        caixa.Add(recuo, 0, wx.LEFT | wx.BOTTOM, e)
+        self.ed_cores = EditorSequencia(
+            self, cx, self.passos,
+            desenhar=lambda gc, x, y, d, p, alfa: desenhar_bolinha(gc, x, y, d, p[:3], alfa),
+            dica=lambda p: ("Pausa (apagada)" if tuple(p[:3]) == APAGADO
+                            else "#{:02X}{:02X}{:02X}".format(*p[:3])) + f", {p[3]:.2f} s",
+            rotulo=lambda p: segundos(p[3]),
+            dica_adicionar="Adicionar cor ou pausa",
+            preencher=self.detalhe_cor,
+            novos=[("Cor…", self.nova_cor), ("Pausa (apagada)", lambda: [*APAGADO, 0.5])],
+            ao_mudar=self.aplicar_pisca,
+        )
+        linha.Add(self.ed_cores.faixa)
+        caixa.Add(linha, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
         raiz.Add(caixa, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, m)
 
         # --- vibração
@@ -575,14 +760,45 @@ class Janela(wx.Frame):
         linha.Add(self.spin_duracao, 0, wx.RIGHT, self.FromDIP(2))
         linha.Add(wx.StaticText(cx, label="s"), 0, wx.ALIGN_CENTER_VERTICAL)
         linha.AddStretchSpacer()
-        bt = wx.Button(cx, label="Vibrar")
-        bt.SetDefault()
-        bt.Bind(wx.EVT_BUTTON, self.on_vibrar)
-        linha.Add(bt, 0, wx.RIGHT, e)
-        bt = wx.Button(cx, label="Parar")
-        bt.Bind(wx.EVT_BUTTON, lambda ev: self.g.parar_vibracao())
-        linha.Add(bt)
+        # cada botão vira "Parar" enquanto o que ele começou está tocando (ver acompanhar)
+        self.bt_vibrar = wx.Button(cx, label=self.ROTULO_VIBRAR, size=cx.FromDIP(wx.Size(110, -1)))
+        self.bt_vibrar.SetDefault()
+        self.bt_vibrar.Bind(wx.EVT_BUTTON, self.on_vibrar)
+        linha.Add(self.bt_vibrar)
         caixa.Add(linha, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
+
+        caixa.Add(wx.StaticLine(cx), 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
+
+        # padrão de vibração: passos [forte, fraco, segundos], como a sequência do pisca
+        self.padrao = [list(p) for p in cfg["padrao_vibracao"]]
+        linha = wx.BoxSizer(wx.HORIZONTAL)
+        rotulo = wx.StaticText(cx, label="Padrão", size=cx.FromDIP(wx.Size(78, -1)))
+        linha.Add(rotulo, 0, wx.TOP, self.FromDIP(8))
+        self.ed_vib = EditorSequencia(
+            self, cx, self.padrao,
+            desenhar=lambda gc, x, y, d, p, alfa: desenhar_vibracao(gc, x, y, d, p[0], p[1], alfa),
+            dica=lambda p: ("Pausa" if p[0] == p[1] == 0 else f"Forte {p[0]}, fraco {p[1]}") + f", {p[2]:.2f} s",
+            rotulo=lambda p: segundos(p[2]),
+            dica_adicionar="Adicionar vibração ou pausa",
+            preencher=self.detalhe_vibracao,
+            novos=[("Vibração (valores dos motores acima)",
+                    lambda: [self.slider_forte.GetValue(), self.slider_fraco.GetValue(), 0.3]),
+                   ("Pausa", lambda: [0, 0, 0.3])],
+            ao_mudar=self.aplicar_padrao,
+        )
+        linha.Add(self.ed_vib.faixa)
+        caixa.Add(linha, 0, wx.LEFT | wx.RIGHT, e)
+        linha = wx.BoxSizer(wx.HORIZONTAL)
+        linha.AddSpacer(self.FromDIP(78))
+        self.chk_repetir = wx.CheckBox(cx, label="Repetir até parar")
+        self.chk_repetir.SetValue(cfg["repetir_padrao"])
+        self.chk_repetir.Bind(wx.EVT_CHECKBOX, self.on_repetir)
+        linha.Add(self.chk_repetir, 0, wx.ALIGN_CENTER_VERTICAL)
+        linha.AddStretchSpacer()
+        self.bt_tocar = wx.Button(cx, label=self.ROTULO_TOCAR, size=cx.FromDIP(wx.Size(110, -1)))
+        self.bt_tocar.Bind(wx.EVT_BUTTON, self.on_tocar)
+        linha.Add(self.bt_tocar)
+        caixa.Add(linha, 0, wx.EXPAND | wx.ALL, e)
         raiz.Add(caixa, 0, wx.EXPAND | wx.ALL, m)
 
         painel.SetSizer(raiz)
@@ -590,6 +806,33 @@ class Janela(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.on_fechar)
 
         self.aplicar_luz()
+        self.aplicar_padrao()
+
+        # acompanha o que está tocando no controle: destaca o passo e troca os botões por "Parar"
+        self.andamento = (None, None, False)
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, lambda ev: self.acompanhar())
+        self.timer.Start(50)
+
+    ROTULO_VIBRAR = "Vibrar"
+    ROTULO_TOCAR = "Tocar padrão"
+
+    def acompanhar(self):
+        if not self.IsShown():
+            return
+        andamento = self.g.andamento()
+        if andamento == self.andamento:
+            return
+        self.andamento = andamento
+        passo_cor, passo_vib, simples = andamento
+        self.ed_cores.faixa.tocar(passo_cor)
+        self.ed_vib.faixa.tocar(passo_vib)
+        self.bt_vibrar.SetLabel("Parar" if simples else self.ROTULO_VIBRAR)
+        self.bt_tocar.SetLabel("Parar" if passo_vib is not None else self.ROTULO_TOCAR)
+
+    def reajustar(self):
+        self.painel.Layout()
+        self.painel.GetSizer().SetSizeHints(self)
 
     def _slider(self, pai, rotulo, valor, minimo, maximo, ao_mudar, sufixo=""):
         """Linha 'rótulo  [-----o----]  [valor]'. O valor pode ser arrastado ou digitado; os dois
@@ -652,78 +895,89 @@ class Janela(wx.Frame):
         if rgb:
             self.definir_cor(rgb)
 
-    # --- sequência do pisca
+    # --- sequência do pisca e padrão de vibração (detalhes de cada passo)
 
-    def alterar_passos(self):
-        self.faixa.atualizar()
-        self.painel.Layout()
-        self.painel.GetSizer().SetSizeHints(self)  # a faixa ganha outra fileira a cada 9 cores
-        self.aplicar_pisca()
+    def _campos(self, painel, raiz, campos):
+        """Grade 'rótulo [campo] unidade' do balão de detalhe."""
+        grade = wx.FlexGridSizer(cols=3, vgap=self.FromDIP(4), hgap=self.FromDIP(4))
+        for rotulo, campo, unidade in campos:
+            grade.Add(wx.StaticText(painel, label=rotulo), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, self.FromDIP(2))
+            grade.Add(campo)
+            grade.Add(wx.StaticText(painel, label=unidade), 0, wx.ALIGN_CENTER_VERTICAL)
+        raiz.Add(grade, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, self.FromDIP(6))
 
-    def abrir_detalhe(self, i, ret_na_tela):
-        if self.detalhe:
-            self.detalhe.fechar()
-        self.detalhe = DetalhePasso(self, i)
-        self.detalhe.Position(ret_na_tela.GetBottomLeft(), wx.Size(0, self.FromDIP(2)))
-        self.faixa.selecionado = i
-        self.faixa.Refresh()
-        self.detalhe.Popup()
+    @staticmethod
+    def _ao_digitar(campo, converter, minimo, maximo, aplicar):
+        """Aplica o valor a cada tecla (sem esperar Enter ou sair do campo), se ele for válido."""
+        def digitou(ev):
+            try:
+                valor = converter(ev.GetString().replace(",", "."))
+            except ValueError:
+                return
+            if minimo <= valor <= maximo:
+                aplicar(valor)
+        campo.Bind(wx.EVT_TEXT, digitou)
 
-    def detalhe_fechado(self, detalhe):
-        if detalhe is self.detalhe:
-            self.detalhe = None
-            self.faixa.selecionado = None
-            self.faixa.Refresh()
-        wx.CallAfter(detalhe.Destroy)
+    def _campo_duracao(self, painel, editor, i, indice):
+        spin = self._spin(painel, editor.itens[i][indice], 0.05, 10.0, 0.05)
+        spin.Bind(wx.EVT_SPINCTRLDOUBLE, lambda ev: editor.mudar_campo(i, indice, ev.GetValue()))
+        self._ao_digitar(spin, float, 0.05, 10.0, lambda v: editor.mudar_campo(i, indice, v))
+        return spin
 
-    def menu_adicionar(self, ret_na_tela):
-        menu = wx.Menu()
-        self.Bind(wx.EVT_MENU, self.on_adicionar_cor, menu.Append(wx.ID_ANY, "Cor…"))
-        self.Bind(wx.EVT_MENU, lambda ev: self.adicionar_passo(APAGADO), menu.Append(wx.ID_ANY, "Pausa (apagada)"))
-        self.faixa.PopupMenu(menu, self.faixa.ScreenToClient(ret_na_tela.GetBottomLeft()))
-        menu.Destroy()
+    def detalhe_cor(self, balao, painel, raiz, i):
+        r, g, b, _ = self.passos[i]
+        rgb = (r, g, b)
+        dica = "Trocar por uma cor" if rgb == APAGADO else "Trocar a cor"
+        bolinha = Bolinha(painel, rgb, dica, lambda _: balao.acao(self.trocar_cor_passo, i))
+        sub = "Pausa (apagada)" if rgb == APAGADO else "#{:02X}{:02X}{:02X}".format(*rgb)
+        DetalhePasso.titulo(painel, raiz, bolinha, f"Passo {i + 1} de {len(self.passos)}", sub)
+        self._campos(painel, raiz, [("Duração", self._campo_duracao(painel, self.ed_cores, i, 3), "s")])
 
-    def adicionar_passo(self, rgb):
-        self.passos.append([*rgb, 0.5])
-        self.alterar_passos()
-
-    def on_adicionar_cor(self, _):
+    def nova_cor(self):
         rgb = self.escolher_cor(self.cor)
-        if rgb:
-            self.adicionar_passo(rgb)
+        return [*rgb, 0.5] if rgb else None
 
     def trocar_cor_passo(self, i):
         atual = tuple(self.passos[i][:3])
         rgb = self.escolher_cor(self.cor if atual == APAGADO else atual)
         if rgb:
             self.passos[i][:3] = rgb
-            self.alterar_passos()
-        self.reabrir_detalhe(i)
+            self.ed_cores.alterar()
+        self.ed_cores.reabrir(i)
 
-    def mudar_tempo_passo(self, i, segundos):
-        self.passos[i][3] = segundos
-        self.aplicar_pisca()
+    def detalhe_vibracao(self, balao, painel, raiz, i):
+        passo = self.padrao[i]
+        mini = Miniatura(painel, lambda gc, x, y, d: desenhar_vibracao(gc, x, y, d, passo[0], passo[1]))
+        sub = "Pausa" if passo[0] == passo[1] == 0 else "Vibração"
+        DetalhePasso.titulo(painel, raiz, mini, f"Passo {i + 1} de {len(self.padrao)}", sub)
+        campos = []
+        for rotulo, indice in (("Motor forte", 0), ("Motor fraco", 1)):
+            campo = wx.SpinCtrl(painel, value=str(passo[indice]), min=0, max=255,
+                                size=painel.FromDIP(wx.Size(70, -1)), style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER)
 
-    def arrastar_passo(self, origem, insercao):
-        """Solta o passo `origem` na posição `insercao` (0..len, contada antes de tirá-lo)."""
-        destino = insercao - 1 if insercao > origem else insercao
-        if destino != origem:
-            self.passos.insert(destino, self.passos.pop(origem))
-            self.alterar_passos()
+            def mudou(ev, campo=campo, indice=indice):
+                self.ed_vib.mudar_campo(i, indice, campo.GetValue())
+                mini.Refresh()
 
-    def mover_passo(self, i, delta):
-        j = i + delta
-        self.passos[i], self.passos[j] = self.passos[j], self.passos[i]
-        self.alterar_passos()
-        self.reabrir_detalhe(j)  # o detalhe acompanha a cor na nova posição
+            campo.Bind(wx.EVT_SPINCTRL, mudou)
+            campo.Bind(wx.EVT_TEXT_ENTER, mudou)
 
-    def reabrir_detalhe(self, i):
-        if 0 <= i < len(self.passos):
-            self.abrir_detalhe(i, self.faixa._na_tela(i))
+            def digitou(valor, indice=indice):
+                self.ed_vib.mudar_campo(i, indice, valor)
+                mini.Refresh()
 
-    def remover_passo(self, i):
-        del self.passos[i]
-        self.alterar_passos()
+            self._ao_digitar(campo, int, 0, 255, digitou)
+            campos.append((rotulo, campo, ""))
+        campos.append(("Duração", self._campo_duracao(painel, self.ed_vib, i, 2), "s"))
+        self._campos(painel, raiz, campos)
+
+    def aplicar_padrao(self):
+        self.g.padrao_vibracao(self.padrao)
+        self.agendar_salvar()
+
+    def on_repetir(self, _):
+        self.g.repetir_padrao(self.chk_repetir.IsChecked())
+        self.agendar_salvar()
 
     def on_apagar(self, _):
         self.ligada = not self.bt_ligar.GetValue()
@@ -755,7 +1009,18 @@ class Janela(wx.Frame):
         self.agendar_salvar()
 
     def on_vibrar(self, _):
-        self.g.vibrar(self.slider_forte.GetValue(), self.slider_fraco.GetValue(), self.spin_duracao.GetValue())
+        if self.andamento[2]:
+            self.g.parar_vibracao()
+        else:
+            self.g.vibrar(self.slider_forte.GetValue(), self.slider_fraco.GetValue(), self.spin_duracao.GetValue())
+        self.acompanhar()
+
+    def on_tocar(self, _):
+        if self.andamento[1] is not None:
+            self.g.parar_vibracao()
+        else:
+            self.g.tocar_padrao(self.chk_repetir.IsChecked())
+        self.acompanhar()
 
     def conexao_mudou(self, conectado, bluetooth):
         """Chamado da thread do controle; só mexe na GUI via wx.CallAfter."""
@@ -781,6 +1046,7 @@ class Janela(wx.Frame):
             sequencia=[list(p) for p in self.passos],
             forte=self.slider_forte.GetValue(), fraco=self.slider_fraco.GetValue(),
             duracao=self.spin_duracao.GetValue(),
+            padrao_vibracao=[list(p) for p in self.padrao], repetir_padrao=self.chk_repetir.IsChecked(),
         )
         config.salvar(self.cfg)
 
@@ -803,6 +1069,7 @@ class Janela(wx.Frame):
 
     def sair(self):
         self.saindo = True
+        self.timer.Stop()
         self._salvar_depois.Stop()
         self.salvar_config()
         self.g.encerrar()

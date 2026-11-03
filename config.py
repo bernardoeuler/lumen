@@ -16,6 +16,9 @@ PADRAO = {
     "forte": 255,
     "fraco": 255,
     "duracao": 1.0,        # s
+    # padrão de vibração: [forte, fraco, segundos]; [0, 0, s] é uma pausa
+    "padrao_vibracao": [[255, 0, 0.3], [0, 0, 0.2], [0, 255, 0.3]],
+    "repetir_padrao": False,
 }
 
 log = logging.getLogger(__name__)
@@ -38,7 +41,14 @@ def carregar():
     if "sequencia" not in salvo and "aceso" in salvo:
         dados["sequencia"] = _sequencia_antiga(salvo, dados["cor"])
     dados["sequencia"] = [p for p in dados["sequencia"] if _passo_valido(p)]
+    dados["padrao_vibracao"] = [p for p in dados["padrao_vibracao"] if _passo_vibracao_valido(p)]
     return dados
+
+
+def _passo_vibracao_valido(p):
+    return (isinstance(p, list) and len(p) == 3
+            and all(isinstance(c, int) and 0 <= c <= 255 for c in p[:2])
+            and isinstance(p[2], (int, float)) and p[2] > 0)
 
 
 def _passo_valido(p):
