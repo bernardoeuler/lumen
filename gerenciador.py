@@ -101,7 +101,8 @@ class Gerenciador:
             self._estado.vibra_ate = 0.0
             self._estado.padrao_inicio = None
         self._parar.set()
-        self._thread.join(timeout=2)
+        if self._thread.is_alive():  # no --smoke-test a thread nem chega a começar
+            self._thread.join(timeout=2)
 
     def luz(self, rgb):
         with self._trava:

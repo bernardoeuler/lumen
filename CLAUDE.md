@@ -8,7 +8,8 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
 
 ## Arquivos
 
-- `app.py`: GUI (wxPython) e bandeja; ponto de entrada. `--version` imprime a versão e sai (sem janela).
+- `app.py`: GUI (wxPython) e bandeja; ponto de entrada. `--version` imprime a versão e sai (sem janela);
+  `--smoke-test` abre a janela de verdade, exercita e sai sozinho (sem controle, sem salvar), usado no CI.
 - `versao.py`: **versão única** do app (`VERSAO`, semver) e URL do repositório.
 - `gerenciador.py`: dono do controle; guarda o estado (cor, pisca, vibração) e o envia numa thread,
   reconectando sozinho.
@@ -24,7 +25,9 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
   `controle.py` importa `hidraw` no Linux (teste em `tests/test_controle.py`). Acesso sem root pela
   regra do udev.
 - `testar_luz.py`, `testar_apagar.py`, `testar_bateria.py`: diagnósticos direto no HID.
-- `tests/`: pytest da lógica sem GUI (preset, gerenciador). `python -m pytest`.
+- `tests/`: pytest. Lógica (preset, gerenciador, controle) e a janela (`test_janela.py`: abre de verdade,
+  mexe nos controles com eventos do wx e confere o que chega ao `Gerenciador` sem a thread). No Linux sem
+  tela: `xvfb-run -a python -m pytest`.
 - `assets/`: ícones (`lumen.ico` do exe, `lumen.png` do Linux), gerados com `criar_imagem` do `app.py`.
 - `build.ps1` (Windows) e `build.sh` (Linux): build com Nuitka; `-Pacote`/`--pacote` gera o zip/tar.gz em `dist/`.
 - `packaging/linux/`: regra do udev, `.desktop`, `install.sh` e `uninstall.sh` que vão no tar.gz.

@@ -101,13 +101,17 @@ jobs:
           # sem console: confere só que abre e sai sem erro (--version não abre janela nem toca no controle)
           $p = Start-Process build\lumen\lumen.exe -ArgumentList "--version" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "lumen.exe --version saiu com $($p.ExitCode)" }
+          # abre a janela de verdade, exercita e fecha sozinho (sem tocar no controle)
+          $p = Start-Process build\lumen\lumen.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "lumen.exe --smoke-test travou" }
+          if ($p.ExitCode -ne 0) { throw "lumen.exe --smoke-test saiu com $($p.ExitCode)" }
 
       # --- Linux
       - name: Dependências (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends patchelf libgtk-3-0 libnotify4 libsdl2-2.0-0 libxtst6 libxxf86vm1
+          sudo apt-get install -y --no-install-recommends patchelf xvfb xauth libgtk-3-0 libnotify4 libsdl2-2.0-0 libxtst6 libxxf86vm1
           python -m pip install --only-binary wxPython \
             -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04/ \
             -r requirements-dev.txt
@@ -122,6 +126,8 @@ jobs:
           saida="$(./build/lumen/lumen --version)"
           echo "$saida"
           [[ "$saida" == "Lumen ${{ needs.preparar.outputs.versao }}" ]]
+          # abre a janela de verdade num display virtual, exercita e fecha sozinho
+          timeout 60 xvfb-run -a ./build/lumen/lumen --smoke-test
 
       - uses: actions/upload-artifact@v7
         with:
@@ -153,7 +159,7 @@ jobs:
           # alternativas separadas por "|": no Ubuntu 24.04 vários pacotes ganharam o sufixo t64
           lista=""
           for pacote in "libgtk-3-0t64|libgtk-3-0" "libasound2t64|libasound2" "libcurl4t64|libcurl4" \
-                        libpulse0 libdrm2 libgbm1 libdecor-0-0 libsm6 libxss1 libxtst6; do
+                        libpulse0 libdrm2 libgbm1 libdecor-0-0 libsm6 libxss1 libxtst6 xvfb xauth; do
             for nome in $(echo "$pacote" | tr '|' ' '); do
               if apt-cache show "$nome" >/dev/null 2>&1; then lista="$lista $nome"; break; fi
             done
@@ -174,6 +180,8 @@ jobs:
           saida="$(./lumen --version)"
           echo "$saida"
           [ "$saida" = "Lumen ${{ needs.preparar.outputs.versao }}" ]
+          # abre a janela de verdade num display virtual, exercita e fecha sozinho
+          timeout 60 xvfb-run -a ./lumen --smoke-test
 
   publicar:
     name: Publicar release

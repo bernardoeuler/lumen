@@ -1,4 +1,4 @@
-"""Lumen: programa com GUI (wxPython) que é o dono do controle DS4: luz, pisca e vibração.
+r"""Lumen: programa com GUI (wxPython) que é o dono do controle DS4: luz, pisca e vibração.
 
 Fechar a janela minimiza para a bandeja; o programa só encerra pelo "Sair" no ícone da bandeja.
 Abrir o programa de novo só traz a janela da instância que já está rodando.
@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import sys
+import traceback
 
 import wx
 import wx.adv
@@ -1398,11 +1399,56 @@ def configurar_log():
     )
 
 
+def smoke_test():
+    """--smoke-test: abre a janela de verdade, exercita o desenho e o balão de detalhe e sai sozinho.
+
+    Não toca no controle (a thread do gerenciador não começa), não usa a instância única e não salva
+    nada. Usado no CI para garantir que o app abre em cada sistema; sai com 0 se tudo deu certo.
+    """
+    erros = []
+
+    def registrar(tipo, valor, tb):
+        # exceções dentro de eventos do wx não derrubam o MainLoop; aqui elas reprovam o teste
+        traceback.print_exception(tipo, valor, tb)
+        erros.append(valor)
+
+    sys.excepthook = registrar
+    config.salvar = lambda dados: None
+    declarar_dpi()
+    app = wx.App(False)
+    janela = Janela(Gerenciador(), dict(config.PADRAO))
+    janela.Show()
+    resultado = []
+
+    def exercitar():
+        janela._mostrar_conexao(True, True)
+        janela._mostrar_bateria(80, False)
+        janela.acompanhar()
+        janela.ed_cores.abrir_detalhe(0)
+        janela.ed_vib.abrir_detalhe(0)
+        wx.CallLater(500, terminar)
+
+    def terminar():
+        for editor in (janela.ed_cores, janela.ed_vib):
+            if editor.detalhe:
+                editor.detalhe.fechar()
+        ok = janela.IsShown() and not erros
+        print(f"smoke test: {'ok' if ok else f'falhou ({len(erros)} erro(s))'}")
+        resultado.append(0 if ok else 1)
+        janela.sair()
+
+    wx.CallLater(1500, exercitar)
+    app.MainLoop()
+    return resultado[0] if resultado else 1
+
+
 def main():
     if "--version" in sys.argv[1:]:
         # sem abrir janela nem tocar no controle (usado também no teste do build)
         print(f"{TITULO} {versao.VERSAO}")
         return 0
+    if "--smoke-test" in sys.argv[1:]:
+        return smoke_test()
     configurar_log()
     inst = instancia.Instancia()
     if not inst.principal:
