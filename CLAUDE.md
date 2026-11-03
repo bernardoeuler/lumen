@@ -27,7 +27,10 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
 - `testar_luz.py`, `testar_apagar.py`, `testar_bateria.py`: diagnósticos direto no HID.
 - `tests/`: pytest. Lógica (preset, gerenciador, controle) e a janela (`test_janela.py`: abre de verdade,
   mexe nos controles com eventos do wx e confere o que chega ao `Gerenciador` sem a thread). No Linux sem
-  tela: `xvfb-run -a python -m pytest`.
+  tela: `xvfb-run -a python -m pytest`. `tests/ds4_falso.py` é um controle falso que imita o clone (luz só
+  com flags 0x07, preto vira branco, CRC, bateria no byte 32) e substitui o `hid` (fixture `hid_falso`);
+  `test_protocolo.py` testa o `controle.py` e o `Gerenciador` com a thread contra ele. Nova mania
+  descoberta no controle real deve virar comportamento do `ControleClone` + teste.
 - `assets/`: ícones (`lumen.ico` do exe, `lumen.png` do Linux), gerados com `criar_imagem` do `app.py`.
 - `build.ps1` (Windows) e `build.sh` (Linux): build com Nuitka; `-Pacote`/`--pacote` gera o zip/tar.gz em `dist/`.
 - `packaging/linux/`: regra do udev, `.desktop`, `install.sh` e `uninstall.sh` que vão no tar.gz.
