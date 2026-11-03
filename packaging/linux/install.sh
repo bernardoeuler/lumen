@@ -23,5 +23,16 @@ udevadm trigger --subsystem-match=hidraw
 command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q /usr/share/icons/hicolor || true
 
+faltando="$(find /opt/lumen -type f \( -name '*.so*' -o -name lumen \) -exec ldd {} \; 2>/dev/null \
+    | awk '/not found/ { print $1 }' | sort -u)"
+if [[ -n "$faltando" ]]; then
+    echo
+    echo "Atenção: o Lumen precisa destas bibliotecas do sistema, que não foram encontradas:"
+    echo "$faltando" | sed 's/^/  /'
+    echo "Instale pelo gerenciador de pacotes da sua distribuição (no Ubuntu/Debian, por exemplo:"
+    echo "  sudo apt install libgtk-3-0 libasound2 libpulse0 libgbm1 libsm6 libxss1 libxtst6 libcurl4)."
+    echo
+fi
+
 echo "Lumen instalado. Abra pelo menu de aplicativos ou rode: lumen"
 echo "Se o controle já estava conectado, desconecte e conecte de novo para a permissão valer."

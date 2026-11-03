@@ -13,8 +13,8 @@ INSTALACAO = """
 **Windows (10/11, x64):** baixe `lumen-{v}-windows-x64.zip`, extraia e abra `lumen\\lumen.exe`.
 Não precisa instalar nada; a pasta inteira é o programa.
 
-**Linux (x86_64, glibc 2.35+ — Ubuntu 22.04, Debian 12, Fedora 36 ou mais novos):** precisa do GTK 3
-(já vem nos desktops comuns).
+**Linux (x86_64, glibc 2.35+ — Ubuntu 22.04, Debian 12, Fedora 36 ou mais novos):** precisa das bibliotecas
+que todo desktop já tem (GTK 3, áudio, Mesa). Testado em Ubuntu 22.04, Ubuntu 24.04 e Debian 12.
 
 ```bash
 tar -xzf lumen-{v}-linux-x86_64.tar.gz

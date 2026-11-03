@@ -27,7 +27,7 @@ Extraia `lumen-<versão>-windows-x64.zip` e abra `lumen\lumen.exe`. Não precisa
 
 ### Linux (x86_64)
 
-Requer glibc 2.35 ou mais nova (Ubuntu 22.04, Debian 12, Fedora 36 ou mais novos) e GTK 3.
+Requer glibc 2.35 ou mais nova (Ubuntu 22.04, Debian 12, Fedora 36 ou mais novos) e as bibliotecas que todo desktop já tem (GTK 3, áudio, Mesa). Testado em Ubuntu 22.04, Ubuntu 24.04 e Debian 12.
 
 ```bash
 tar -xzf lumen-<versão>-linux-x86_64.tar.gz
