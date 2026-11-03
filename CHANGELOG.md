@@ -12,6 +12,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 - **Linux:** o app não abria no Ubuntu 24.04 e em distribuições mais novas, por faltar bibliotecas
   do sistema (como `libtiff.so.5`, `libSDL2` e `libnotify`). Agora elas vão dentro do pacote.
+- **Linux:** rótulos ("Motor forte") e campos numéricos cortados no GTK, e um retângulo vazio no
+  lugar da bateria antes da primeira leitura.
 
 ### Interno
 
