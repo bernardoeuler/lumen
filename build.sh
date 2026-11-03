@@ -32,6 +32,23 @@ mkdir -p "$saida"
 # o Nuitka gera build/app.dist; entrega como build/lumen
 rm -rf "$saida/lumen"
 mv "$saida"/*.dist "$saida/lumen"
+
+# O Nuitka não copia bibliotecas do sistema, mas o wxPython do Linux depende de algumas que não vêm em
+# toda instalação ou mudam de versão entre distribuições (ex.: libtiff.so.5 só existe até o Ubuntu
+# 22.04). Essas vão junto no pacote; as do núcleo (glibc, GTK, GLib, X11/Wayland, GL) continuam vindo
+# do sistema. Os binários já procuram bibliotecas em $ORIGIN (RPATH do Nuitka).
+incluir='lib(tiff|SDL2-2\.0|notify|secret-1|pcre2-32|jbig|deflate|Lerc)\.so'
+for _ in 1 2 3; do  # repete para pegar as dependências das próprias bibliotecas incluídas
+    find "$saida/lumen" -type f \( -name '*.so*' -o -name lumen \) -exec ldd {} \; 2>/dev/null \
+        | awk '/=> \// { print $3 }' | sort -u | grep -E "/$incluir" \
+        | while read -r lib; do
+            nome="$(basename "$lib")"
+            [[ -e "$saida/lumen/$nome" ]] && continue
+            cp -L "$lib" "$saida/lumen/$nome"
+            patchelf --set-rpath '$ORIGIN' "$saida/lumen/$nome"
+            echo "incluída: $nome"
+        done
+done
 echo "Build pronto: $saida/lumen/lumen"
 
 if $pacote; then

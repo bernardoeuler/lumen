@@ -6,6 +6,18 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [1.0.2] - 2026-11-03
+
+### Corrigido
+
+- **Linux:** o app não abria no Ubuntu 24.04 e em distribuições mais novas, por faltar bibliotecas
+  do sistema (como `libtiff.so.5`, `libSDL2` e `libnotify`). Agora elas vão dentro do pacote.
+
+### Interno
+
+- A release só é publicada depois de o pacote Linux rodar em Ubuntu 22.04, Ubuntu 24.04 e Debian 12
+  limpos.
+
 ## [1.0.1] - 2026-11-03
 
 ### Corrigido
@@ -34,6 +46,7 @@ Primeira versão pública.
 - Bandeja do sistema, instância única e reconexão automática do controle.
 - Executáveis para Windows (x64) e Linux (x86_64).
 
-[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.1...HEAD
+[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/bernardoeuler/lumen/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bernardoeuler/lumen/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bernardoeuler/lumen/releases/tag/v1.0.0

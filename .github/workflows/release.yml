@@ -130,9 +130,46 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # O pacote Linux leva as bibliotecas que mudam entre distribuições; aqui ele roda em sistemas limpos,
+  # só com o GTK 3 (o que todo desktop tem), para garantir que não falta nenhuma.
+  testar-linux:
+    name: Testar pacote (${{ matrix.imagem }})
+    needs: [preparar, build]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.imagem }}
+    strategy:
+      fail-fast: false
+      matrix:
+        imagem: ["ubuntu:22.04", "ubuntu:24.04", "debian:12"]
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen-linux-x86_64
+
+      - name: GTK 3
+        run: |
+          apt-get update
+          # no Ubuntu 24.04 o pacote se chama libgtk-3-0t64
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk-3-0t64 \
+            || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk-3-0
+
+      - name: Rodar o executável
+        run: |
+          tar -xzf lumen-*-linux-x86_64.tar.gz
+          cd lumen-*-linux-x86_64/lumen
+          faltando="$(for x in ./lumen ./*.so* ./wx/*.so; do ldd "$x" 2>/dev/null | grep 'not found'; done | sort -u)"
+          if [ -n "$faltando" ]; then
+            echo "::error::Bibliotecas faltando em ${{ matrix.imagem }}:"
+            echo "$faltando"
+            exit 1
+          fi
+          saida="$(./lumen --version)"
+          echo "$saida"
+          [ "$saida" = "Lumen ${{ needs.preparar.outputs.versao }}" ]
+
   publicar:
     name: Publicar release
-    needs: [preparar, build]
+    needs: [preparar, build, testar-linux]
     if: needs.preparar.outputs.publicar == 'true'
     runs-on: ubuntu-22.04
     permissions:
