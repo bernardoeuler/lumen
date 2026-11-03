@@ -37,7 +37,8 @@ mv "$saida"/*.dist "$saida/lumen"
 # toda instalação ou mudam de versão entre distribuições (ex.: libtiff.so.5 só existe até o Ubuntu
 # 22.04). Essas vão junto no pacote; as do núcleo (glibc, GTK, GLib, X11/Wayland, GL) continuam vindo
 # do sistema. Os binários já procuram bibliotecas em $ORIGIN (RPATH do Nuitka).
-incluir='lib(tiff|SDL2-2\.0|notify|secret-1|pcre2-32|jbig|deflate|Lerc|Xxf86vm)\.so'
+# (libjpeg.so.8: o Debian usa a .so.62, com outro nome, então não há conflito)
+incluir='lib(tiff|jpeg|SDL2-2\.0|notify|secret-1|pcre2-32|jbig|deflate|Lerc|Xxf86vm)\.so'
 # carregadas em tempo de execução (dlopen), então o ldd não as mostra: vão pelo nome
 extras=(libXxf86vm.so.1)
 for _ in 1 2 3; do  # repete para pegar as dependências das próprias bibliotecas incluídas
