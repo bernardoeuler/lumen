@@ -27,7 +27,7 @@ jobs:
       publicar: ${{ steps.versao.outputs.publicar }}
       prerelease: ${{ steps.versao.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Versão
         id: versao
@@ -48,7 +48,7 @@ jobs:
       - name: Notas da release (CHANGELOG.md)
         run: python3 .github/scripts/notas_release.py "${{ steps.versao.outputs.versao }}" > notas.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: notas
           path: notas.md
@@ -67,16 +67,16 @@ jobs:
           - nome: linux-x86_64
             os: ubuntu-22.04  # glibc mais antiga = roda em mais distribuições
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements*.txt
 
       - name: Cache do Nuitka
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/Nuitka
@@ -123,7 +123,7 @@ jobs:
           echo "$saida"
           [[ "$saida" == "Lumen ${{ needs.preparar.outputs.versao }}" ]]
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lumen-${{ matrix.nome }}
           path: dist/*
@@ -138,7 +138,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artefatos
 
