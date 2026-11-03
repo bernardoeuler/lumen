@@ -1,0 +1,5 @@
+# Só configuração de ferramentas; o app não é instalado como pacote (é distribuído como executável).
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

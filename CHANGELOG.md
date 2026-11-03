@@ -1,0 +1,31 @@
+# Changelog
+
+Todas as mudanças relevantes do Lumen ficam registradas aqui.
+O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
+[versionamento semântico](https://semver.org/lang/pt-BR/).
+
+## [Não lançado]
+
+## [1.0.0] - 2026-11-03
+
+Primeira versão pública.
+
+### Adicionado
+
+- **Luz:** cores prontas e seletor de cor, brilho e "Apagar" (no tom mais escuro da cor em uso,
+  já que controles paralelos mostram branco com a cor preta).
+- **Pisca:** sequência com quantas cores e pausas quiser, cada uma com sua duração; editar, duplicar,
+  remover e reordenar arrastando.
+- **Vibração:** motores forte e fraco com duração, e padrões de vibração com passos, tocados uma vez
+  ou repetindo.
+- **Sincronizar com a luz:** pisca e padrão de vibração começam juntos, e recomeçam juntos ao mudar
+  o tamanho do ciclo.
+- **Bateria:** nível e carregamento no cabeçalho e na dica do ícone da bandeja.
+- **Presets:** importar e exportar luz e vibração num arquivo `.lumen.json` (formato próprio,
+  versão 1).
+- Passo que está tocando destacado em tempo real.
+- Bandeja do sistema, instância única e reconexão automática do controle.
+- Executáveis para Windows (x64) e Linux (x86_64).
+
+[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/bernardoeuler/lumen/releases/tag/v1.0.0

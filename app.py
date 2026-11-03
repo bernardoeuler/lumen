@@ -17,6 +17,7 @@ import wx.adv
 import config
 import instancia
 import preset
+import versao
 from gerenciador import Gerenciador
 
 TITULO = "Lumen"
@@ -1231,13 +1232,26 @@ class Janela(wx.Frame):
     def menu_opcoes(self, botao):
         """Menu do botão '⋯' do cabeçalho, aberto logo abaixo dele."""
         menu = wx.Menu()
-        for rotulo, acao in (("Importar preset…", self.on_importar), ("Exportar preset…", self.on_exportar)):
-            self.Bind(wx.EVT_MENU, acao, menu.Append(wx.ID_ANY, rotulo))
+        for rotulo, acao in (("Importar preset…", self.on_importar), ("Exportar preset…", self.on_exportar),
+                             (None, None), (f"Sobre o {TITULO}", self.on_sobre)):
+            if rotulo is None:
+                menu.AppendSeparator()
+            else:
+                self.Bind(wx.EVT_MENU, acao, menu.Append(wx.ID_ANY, rotulo))
         botao.PopupMenu(menu, wx.Point(0, botao.GetSize().height))
         menu.Destroy()
         botao._sobre(False)  # o mouse saiu enquanto o menu estava aberto
 
-    CURINGA_PRESET =f"Preset do Lumen (*{preset.EXTENSAO})|*{preset.EXTENSAO}|JSON (*.json)|*.json"
+    def on_sobre(self, _):
+        info = wx.adv.AboutDialogInfo()
+        info.SetName(TITULO)
+        info.SetVersion(versao.VERSAO)
+        info.SetDescription("Luz, pisca, vibração e bateria para controles de PS4\n(inclusive paralelos).")
+        info.SetWebSite(versao.REPOSITORIO)
+        info.SetIcon(self.icone)
+        wx.adv.AboutBox(info, self)
+
+    CURINGA_PRESET = f"Preset do Lumen (*{preset.EXTENSAO})|*{preset.EXTENSAO}|JSON (*.json)|*.json"
 
     def on_exportar(self, _):
         with wx.FileDialog(self, "Exportar preset", wildcard=self.CURINGA_PRESET, defaultFile=f"meu preset{preset.EXTENSAO}",
@@ -1323,9 +1337,13 @@ class Janela(wx.Frame):
         if self.saindo or not evento.CanVeto():
             evento.Skip()
             return
+        if not wx.adv.TaskBarIcon.IsAvailable():
+            # sem bandeja (alguns ambientes Linux), esconder a janela deixaria o app inalcançável
+            self.sair()
+            return
         evento.Veto()
         self.Hide()
-        if not self.avisou_bandeja:
+        if not self.avisou_bandeja and hasattr(self.bandeja, "ShowBalloon"):  # balão só existe no Windows
             self.avisou_bandeja = True
             self.bandeja.ShowBalloon(TITULO, "Continua rodando na bandeja. Use Sair no ícone para encerrar.")
 
@@ -1343,7 +1361,10 @@ class Janela(wx.Frame):
 def declarar_dpi():
     """Avisa o Windows que o app cuida da própria escala; sem isso, com escala acima de 100%,
     o Windows desenha a janela em 100% e estica a imagem (letras borradas). O pythonw.exe não
-    declara isso no manifesto, então é feito aqui, antes de criar qualquer janela."""
+    declara isso no manifesto, então é feito aqui, antes de criar qualquer janela. No Linux o GTK
+    já cuida disso."""
+    if sys.platform != "win32":
+        return
     try:
         ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
     except (AttributeError, OSError):
@@ -1362,16 +1383,21 @@ def configurar_log():
 
 
 def main():
+    if "--version" in sys.argv[1:]:
+        # sem abrir janela nem tocar no controle (usado também no teste do build)
+        print(f"{TITULO} {versao.VERSAO}")
+        return 0
     configurar_log()
     inst = instancia.Instancia()
     if not inst.principal:
-        # deixa a instância principal trazer a própria janela para a frente
-        ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
+        if sys.platform == "win32":
+            # deixa a instância principal trazer a própria janela para a frente
+            ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
         if not instancia.avisar("mostrar"):
             logging.warning("já existe uma instância, mas não consegui avisá-la")
         return
 
-    logging.info("iniciando")
+    logging.info("iniciando %s %s", TITULO, versao.VERSAO)
     declarar_dpi()
     app = wx.App()
     janela = None

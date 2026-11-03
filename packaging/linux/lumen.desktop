@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lumen
+GenericName=Controle de PS4
+Comment=Luz, pisca, vibração e bateria do controle de PS4
+Exec=/opt/lumen/lumen
+Icon=lumen
+Terminal=false
+Categories=Utility;Game;
+Keywords=ds4;dualshock;ps4;controle;controller;lightbar;rumble;
+StartupNotify=false

@@ -1,15 +1,25 @@
-"""Configurações do usuário (última cor, brilho, pisca, vibração), salvas em %LOCALAPPDATA%\\Lumen."""
+"""Configurações do usuário (última cor, brilho, pisca, vibração).
+
+Ficam em %LOCALAPPDATA%\\Lumen no Windows e em $XDG_CONFIG_HOME/lumen (~/.config/lumen) no Linux.
+"""
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
-_BASE = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-PASTA_DADOS = _BASE / "Lumen"
+if sys.platform == "win32":
+    _BASE = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    PASTA_DADOS = _BASE / "Lumen"
+else:
+    _BASE = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    PASTA_DADOS = _BASE / "lumen"
 ARQUIVO = PASTA_DADOS / "config.json"
 
-# o app já se chamou Faísca e, antes, ds4-cli: leva a pasta antiga (config e log) para o nome novo
-_ANTIGA = next((p for p in (_BASE / "Faisca", _BASE / "ds4-cli") if p.is_dir()), None)
+# o app já se chamou Faísca e, antes, ds4-cli (só existiu no Windows): leva a pasta antiga
+# (config e log) para o nome novo
+_ANTIGAS = (_BASE / "Faisca", _BASE / "ds4-cli") if sys.platform == "win32" else ()
+_ANTIGA = next((p for p in _ANTIGAS if p.is_dir()), None)
 if not PASTA_DADOS.exists() and _ANTIGA:
     try:
         _ANTIGA.rename(PASTA_DADOS)

@@ -1,0 +1,8 @@
+* text=auto
+# scripts e arquivos do Linux precisam de LF, mesmo editados no Windows
+*.sh       text eol=lf
+*.rules    text eol=lf
+*.desktop  text eol=lf
+*.ps1      text eol=crlf
+*.ico      binary
+*.png      binary

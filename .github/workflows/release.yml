@@ -1,0 +1,163 @@
+# Release: ao enviar uma tag vX.Y.Z, gera os executáveis de Windows e Linux, as somas SHA-256 e
+# publica a release no GitHub com as notas do CHANGELOG.md.
+# Rodar à mão (workflow_dispatch) só gera os pacotes como artefatos, sem publicar nada.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  preparar:
+    name: Preparar
+    runs-on: ubuntu-22.04
+    outputs:
+      versao: ${{ steps.versao.outputs.versao }}
+      publicar: ${{ steps.versao.outputs.publicar }}
+      prerelease: ${{ steps.versao.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versão
+        id: versao
+        run: |
+          versao="$(python3 -c 'import versao; print(versao.VERSAO)')"
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            if [[ "$GITHUB_REF_NAME" != "v$versao" ]]; then
+              echo "::error::A tag $GITHUB_REF_NAME não bate com versao.py (v$versao)."
+              exit 1
+            fi
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+          fi
+          [[ "$versao" == *-* ]] && echo "prerelease=true" >> "$GITHUB_OUTPUT" || echo "prerelease=false" >> "$GITHUB_OUTPUT"
+
+      - name: Notas da release (CHANGELOG.md)
+        run: python3 .github/scripts/notas_release.py "${{ steps.versao.outputs.versao }}" > notas.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notas
+          path: notas.md
+          retention-days: 7
+
+  build:
+    name: Build (${{ matrix.nome }})
+    needs: preparar
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: windows-x64
+            os: windows-latest
+          - nome: linux-x86_64
+            os: ubuntu-22.04  # glibc mais antiga = roda em mais distribuições
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Cache do Nuitka
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/Nuitka
+            ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-${{ matrix.nome }}-${{ hashFiles('requirements*.txt', '*.py') }}
+          restore-keys: nuitka-${{ matrix.nome }}-
+
+      # --- Windows
+      - name: Dependências (Windows)
+        if: runner.os == 'Windows'
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./build.ps1 -Python python -Pacote
+
+      - name: Teste do executável (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # sem console: confere só que abre e sai sem erro (--version não abre janela nem toca no controle)
+          $p = Start-Process build\lumen\lumen.exe -ArgumentList "--version" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "lumen.exe --version saiu com $($p.ExitCode)" }
+
+      # --- Linux
+      - name: Dependências (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends patchelf libgtk-3-0 libnotify4 libsdl2-2.0-0 libxtst6
+          python -m pip install --only-binary wxPython \
+            -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04/ \
+            -r requirements-dev.txt
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: PYTHON=python ./build.sh --pacote
+
+      - name: Teste do executável (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          saida="$(./build/lumen/lumen --version)"
+          echo "$saida"
+          [[ "$saida" == "Lumen ${{ needs.preparar.outputs.versao }}" ]]
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumen-${{ matrix.nome }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publicar:
+    name: Publicar release
+    needs: [preparar, build]
+    if: needs.preparar.outputs.publicar == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefatos
+
+      - name: Somas SHA-256
+        run: |
+          mkdir dist
+          mv artefatos/lumen-*/* dist/
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Criar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flags=()
+          [[ "${{ needs.preparar.outputs.prerelease }}" == "true" ]] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Lumen ${{ needs.preparar.outputs.versao }}" \
+            --notes-file artefatos/notas/notas.md \
+            --verify-tag "${flags[@]}"
