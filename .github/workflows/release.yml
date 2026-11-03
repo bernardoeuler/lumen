@@ -103,6 +103,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "lumen.exe --version saiu com $($p.ExitCode)" }
           # abre a janela de verdade, exercita e fecha sozinho (sem tocar no controle)
           $p = Start-Process build\lumen\lumen.exe -ArgumentList "--smoke-test" -PassThru
+          $null = $p.Handle  # guarda o handle já, senão o PowerShell pode perder o código de saída
           if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "lumen.exe --smoke-test travou" }
           if ($p.ExitCode -ne 0) { throw "lumen.exe --smoke-test saiu com $($p.ExitCode)" }
 

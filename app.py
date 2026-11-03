@@ -1421,23 +1421,41 @@ def smoke_test():
     resultado = []
 
     def exercitar():
-        janela._mostrar_conexao(True, True)
-        janela._mostrar_bateria(80, False)
-        janela.acompanhar()
-        janela.ed_cores.abrir_detalhe(0)
-        janela.ed_vib.abrir_detalhe(0)
-        wx.CallLater(500, terminar)
+        try:
+            janela._mostrar_conexao(True, True)
+            janela._mostrar_bateria(80, False)
+            janela.acompanhar()
+            janela.ed_cores.abrir_detalhe(0)
+            janela.ed_vib.abrir_detalhe(0)
+        except Exception:
+            registrar(*sys.exc_info())
+        finally:
+            # sempre encerra, com ou sem erro (senão a janela ficaria aberta até o CI matar)
+            wx.CallLater(500, terminar)
 
     def terminar():
-        for editor in (janela.ed_cores, janela.ed_vib):
-            if editor.detalhe:
-                editor.detalhe.fechar()
+        if resultado:
+            return
+        try:
+            for editor in (janela.ed_cores, janela.ed_vib):
+                if editor.detalhe:
+                    editor.detalhe.fechar()
+        except Exception:
+            registrar(*sys.exc_info())
         ok = janela.IsShown() and not erros
         print(f"smoke test: {'ok' if ok else f'falhou ({len(erros)} erro(s))'}")
         resultado.append(0 if ok else 1)
         janela.sair()
 
+    def estourou():
+        # rede de segurança: se algo travar o fluxo acima, falha com mensagem clara
+        if not resultado:
+            print("smoke test: falhou (não terminou em 30 s)")
+            resultado.append(1)
+            wx.GetApp().ExitMainLoop()
+
     wx.CallLater(1500, exercitar)
+    wx.CallLater(30000, estourou)
     app.MainLoop()
     return resultado[0] if resultado else 1
 

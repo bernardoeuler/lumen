@@ -6,6 +6,19 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+### Adicionado
+
+- `--smoke-test`: abre a janela, exercita a interface e fecha sozinho, sem tocar no controle nem
+  salvar nada (para conferir se o app abre num sistema).
+
+### Interno
+
+- Testes da janela (luz, pisca, vibração, sincronização, presets) em Windows e Linux, este com
+  display virtual.
+- Testes de protocolo com um controle falso que imita o controle paralelo (luz só com as três flags,
+  preto vira branco, CRC32, bateria), incluindo reconexão e keepalive.
+- A release só é publicada se o executável empacotado abrir a janela em todos os sistemas testados.
+
 ## [1.0.2] - 2026-11-03
 
 ### Corrigido
