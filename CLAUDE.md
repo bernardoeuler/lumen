@@ -9,6 +9,8 @@ luz, pisca e vibração. Um único programa com GUI, no modelo do DS4Windows.
 - `gerenciador.py`: dono do controle; guarda o estado (cor, pisca, vibração) e o envia numa thread,
   reconectando sozinho.
 - `instancia.py`: instância única via named pipe (ctypes, sem dependência extra).
+- `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\ds4-cli\config.json`,
+  restauradas ao abrir o app.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
 - `build.ps1`: build de produção com Nuitka (ver "Empacotamento").
@@ -39,6 +41,9 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
 - Opcional/futuro: iniciar com o Windows (atalho na pasta Inicializar ou tarefa ao fazer logon).
 - **Biblioteca de GUI: wxPython** (decisão atual). Bandeja com `wx.adv.TaskBarIcon`, seletor de cor
   nativo `wx.ColourDialog`. Atualizações vindas da thread do controle para a GUI via `wx.CallAfter`.
+- Layout: evitar `wx.WrapSizer` dentro de `StaticBox` (calcula mal a altura e esconde o que quebra
+  linha). Tamanhos fixos sempre com `FromDIP`. Bolinhas de cor, prévia e indicador são desenhados à mão
+  (`wx.GraphicsContext`), para terem forma redonda e anel de seleção.
 - **Escopo atual: só luz, pisca e vibração.** Não implementar remapeamento nem gráficos sem pedido.
   Se o projeto crescer para isso, reavaliar PySide6 + pyqtgraph; o remapeamento exigiria ler a entrada
   do controle, um controle de Xbox virtual (ViGEmBus, já instalado, via `vgamepad`) e esconder o
