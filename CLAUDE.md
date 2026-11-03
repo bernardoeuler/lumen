@@ -20,7 +20,9 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
   arquivo): luz, pisca e vibração num documento, seções opcionais, chaves em inglês. Importação tolerante
   (limita valores, descarta passos ruins, avisa); recusa o que não for preset do Lumen.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída). No Linux o
-  `hidapi` do pip usa o hidraw (enxerga Bluetooth); acesso sem root pela regra do udev.
+  wheel do `hidapi` traz dois módulos: `hid` (libusb, **não enxerga Bluetooth**) e `hidraw`; o
+  `controle.py` importa `hidraw` no Linux (teste em `tests/test_controle.py`). Acesso sem root pela
+  regra do udev.
 - `testar_luz.py`, `testar_apagar.py`, `testar_bateria.py`: diagnósticos direto no HID.
 - `tests/`: pytest da lógica sem GUI (preset, gerenciador). `python -m pytest`.
 - `assets/`: ícones (`lumen.ico` do exe, `lumen.png` do Linux), gerados com `criar_imagem` do `app.py`.

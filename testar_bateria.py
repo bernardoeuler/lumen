@@ -7,9 +7,7 @@ Pode rodar com o app aberto (o Windows deixa dois programas lerem o mesmo contro
 import time
 from collections import Counter
 
-import hid
-
-from controle import find_controller
+from controle import find_controller, hid
 
 info = find_controller()
 if info is None:

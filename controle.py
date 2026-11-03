@@ -1,7 +1,13 @@
 """Acesso de baixo nível ao DualShock 4 via HID: achar, abrir e mandar o relatório de saída."""
+import sys
 import zlib
 
-import hid
+if sys.platform.startswith("linux"):
+    # o wheel do hidapi traz dois backends no Linux: "hid" (libusb, não enxerga Bluetooth) e
+    # "hidraw" (hidraw do kernel, USB e Bluetooth); a API é a mesma
+    import hidraw as hid
+else:
+    import hid
 
 SONY_VID = 0x054C
 DS4_PIDS = (0x05C4, 0x09CC)  # DS4 v1 e v2

@@ -6,6 +6,13 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [1.0.1] - 2026-11-03
+
+### Corrigido
+
+- **Linux:** o controle por Bluetooth não era encontrado, porque o acesso usava o backend libusb do
+  hidapi; agora usa o hidraw do kernel, que enxerga USB e Bluetooth.
+
 ## [1.0.0] - 2026-11-03
 
 Primeira versão pública.
@@ -27,5 +34,6 @@ Primeira versão pública.
 - Bandeja do sistema, instância única e reconexão automática do controle.
 - Executáveis para Windows (x64) e Linux (x86_64).
 
-[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.0...HEAD
+[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/bernardoeuler/lumen/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bernardoeuler/lumen/releases/tag/v1.0.0
