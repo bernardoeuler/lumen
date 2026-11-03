@@ -6,6 +6,13 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [1.0.3] - 2026-11-03
+
+### Corrigido
+
+- **Linux:** bateria mostrava "00%" em vez de "100%", as durações dos passos saíam cortadas e o
+  "+" ficava fora do centro do círculo. Os tamanhos agora são medidos com a fonte real.
+
 ### Adicionado
 
 - `--smoke-test`: abre a janela, exercita a interface e fecha sozinho, sem tocar no controle nem
@@ -61,7 +68,8 @@ Primeira versão pública.
 - Bandeja do sistema, instância única e reconexão automática do controle.
 - Executáveis para Windows (x64) e Linux (x86_64).
 
-[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.2...HEAD
+[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/bernardoeuler/lumen/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/bernardoeuler/lumen/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bernardoeuler/lumen/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bernardoeuler/lumen/releases/tag/v1.0.0

@@ -125,6 +125,19 @@ def test_status_da_conexao(janela):
     assert "desconectado" in janela.status.GetLabel()
 
 
+def test_textos_cabem_nos_controles(janela):
+    # a fonte muda entre sistemas (no GTK, "100%" e as durações chegaram a ser cortados)
+    janela._mostrar_bateria(100, False)
+    janela.painel.Layout()
+    largura, _ = janela.bateria.GetTextExtent("100%")
+    assert janela.bateria.GetClientSize().width >= largura + janela.FromDIP(29)
+
+    faixa = janela.ed_cores.faixa
+    w, h = faixa.GetFullTextExtent("0,25 s", faixa.GetFont().Smaller())[:2]
+    assert faixa.cw >= w
+    assert faixa.ch >= faixa.FromDIP(5) + faixa.d + faixa.FromDIP(4) + h
+
+
 # --- luz
 
 def test_clicar_numa_cor_pronta_muda_a_luz(janela):

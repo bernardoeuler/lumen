@@ -206,7 +206,9 @@ class Bateria(wx.Control):
         self.Bind(wx.EVT_PAINT, self.on_paint)
 
     def DoGetBestSize(self):
-        return self.FromDIP(wx.Size(64, 16))
+        # mede o maior texto com a fonte real: a do GTK é maior que a do Windows
+        tw, th = self.GetTextExtent("100%")
+        return wx.Size(tw + self.FromDIP(5 + 22 + 2 + 4), max(th, self.FromDIP(16)))
 
     def definir(self, porcentagem, no_cabo):
         self.porcentagem, self.no_cabo = porcentagem, no_cabo
@@ -445,11 +447,15 @@ class Faixa(wx.Control):
     # célula de cada passo: bolinha em cima, duração embaixo
     @property
     def cw(self):
-        return self.FromDIP(40)
+        return max(self.FromDIP(40), self._rotulo_maior()[0] + self.FromDIP(6))
 
     @property
     def ch(self):
-        return self.FromDIP(46)
+        return self.FromDIP(5) + self.d + self.FromDIP(4) + self._rotulo_maior()[1] + self.FromDIP(3)
+
+    def _rotulo_maior(self):
+        """(largura, altura) do maior rótulo de duração, medidos com a fonte real."""
+        return self.GetFullTextExtent("10,25 s", self.GetFont().Smaller())[:2]
 
     @property
     def d(self):
@@ -550,7 +556,9 @@ class Faixa(wx.Control):
         self.Refresh()
 
     def on_paint(self, _):
-        dc = wx.AutoBufferedPaintDC(self)
+        self.desenhar_em(wx.AutoBufferedPaintDC(self))
+
+    def desenhar_em(self, dc):
         dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
         dc.Clear()
         gc = wx.GraphicsContext.Create(dc)
@@ -585,6 +593,9 @@ class Faixa(wx.Control):
         # bolinha de adicionar: contorno tracejado com '+'
         x, y = self._bolinha(len(self.itens))
         cor = destaque if self.sobre == len(self.itens) else cinza
+        # no GTK, traços de largura ímpar ganham 0,5 px de ajuste e os pares não; sem o ajuste, o círculo
+        # e o '+' ficam com o mesmo centro
+        gc.DisableOffset()
         gc.SetPen(wx.Pen(cor, self.FromDIP(1), wx.PENSTYLE_SHORT_DASH))
         gc.SetBrush(wx.TRANSPARENT_BRUSH)
         gc.DrawEllipse(x, y, d, d)
