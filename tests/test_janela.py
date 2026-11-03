@@ -144,6 +144,11 @@ def test_botoes_de_vibracao_tem_folga(janela):
     assert janela.bt_tocar.GetSize().width == janela.bt_vibrar.GetSize().width
 
 
+def test_bateria_nao_usa_fundo_transparente(janela):
+    # no GTK, BG_STYLE_TRANSPARENT deixou a janela inteira preta (versão 1.0.4)
+    assert janela.bateria.GetBackgroundStyle() != wx.BG_STYLE_TRANSPARENT
+
+
 # --- luz
 
 def test_clicar_numa_cor_pronta_muda_a_luz(janela):

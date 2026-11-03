@@ -78,6 +78,8 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
   linha). Tamanhos fixos sempre com `FromDIP`. Bolinhas de cor, prévia e indicador são desenhados à mão
   (`wx.GraphicsContext`), para terem forma redonda e anel de seleção. Opções secundárias (presets, Sobre)
   ficam no menu do botão "⋯" do cabeçalho, para não poluir a tela.
+- GTK: não usar `wx.BG_STYLE_TRANSPARENT` (deixa a janela inteira preta). Mudança visual no Linux se confere
+  antes de publicar, no WSL com `GTK_THEME=Adwaita:dark`.
 - **Escopo atual: só luz, pisca, vibração e indicador de bateria.** Não implementar remapeamento nem gráficos sem pedido.
   Se o projeto crescer para isso, reavaliar PySide6 + pyqtgraph; o remapeamento exigiria ler a entrada
   do controle, um controle de Xbox virtual (ViGEmBus, já instalado, via `vgamepad`) e esconder o

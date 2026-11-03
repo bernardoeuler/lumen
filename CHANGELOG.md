@@ -6,6 +6,13 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e 
 
 ## [Não lançado]
 
+## [1.0.5] - 2026-11-03
+
+### Corrigido
+
+- **Linux:** a janela inteira ficava preta na 1.0.4, por causa do fundo transparente da bateria.
+  Agora o próprio GTK pinta o fundo do tema atrás dela.
+
 ## [1.0.4] - 2026-11-03
 
 ### Alterado
@@ -79,7 +86,8 @@ Primeira versão pública.
 - Bandeja do sistema, instância única e reconexão automática do controle.
 - Executáveis para Windows (x64) e Linux (x86_64).
 
-[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.4...HEAD
+[Não lançado]: https://github.com/bernardoeuler/lumen/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/bernardoeuler/lumen/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/bernardoeuler/lumen/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bernardoeuler/lumen/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/bernardoeuler/lumen/compare/v1.0.1...v1.0.2

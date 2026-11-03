@@ -199,12 +199,12 @@ class Bateria(wx.Control):
     """Pilha minimalista: contorno fino, preenchimento na cor do nível, raio no cabo, % ao lado."""
 
     def __init__(self, pai):
-        # no GTK a cor informada pelo pai difere do fundo do tema, e pintá-la deixaria um retângulo;
-        # o fundo transparente precisa ser definido antes de criar a janela
-        super().__init__()
-        self.transparente = sys.platform != "win32" and pai.IsTransparentBackgroundSupported()
-        self.SetBackgroundStyle(wx.BG_STYLE_TRANSPARENT if self.transparente else wx.BG_STYLE_PAINT)
-        self.Create(pai, style=wx.BORDER_NONE)
+        super().__init__(pai, style=wx.BORDER_NONE)
+        # no GTK a cor informada pelo pai difere do fundo do tema, e pintá-la deixaria um retângulo:
+        # lá o próprio GTK pinta o fundo. Não usar BG_STYLE_TRANSPARENT: deixa a janela inteira preta.
+        self.fundo_do_tema = sys.platform != "win32"
+        if not self.fundo_do_tema:
+            self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         self.porcentagem = None  # None = sem leitura (desconectado)
         self.no_cabo = False
         self.Bind(wx.EVT_PAINT, self.on_paint)
@@ -225,7 +225,7 @@ class Bateria(wx.Control):
         self.Refresh()
 
     def on_paint(self, _):
-        if self.transparente:
+        if self.fundo_do_tema:
             self.desenhar(wx.PaintDC(self))
             return
         dc = wx.AutoBufferedPaintDC(self)
