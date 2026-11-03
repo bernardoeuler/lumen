@@ -1,7 +1,10 @@
-# ds4-cli
+# Faísca
 
 Ferramenta para controlar um controle de PS4 **paralelo (clone)** conectado por Bluetooth no Windows:
 luz, pisca e vibração. Um único programa com GUI, no modelo do DS4Windows.
+
+Antes se chamava ds4-cli (a pasta local do projeto ainda tem esse nome). O `config.py` renomeia sozinho a
+pasta de dados antiga. Repositório: https://github.com/bernardoeuler/faisca
 
 ## Arquivos
 
@@ -9,14 +12,14 @@ luz, pisca e vibração. Um único programa com GUI, no modelo do DS4Windows.
 - `gerenciador.py`: dono do controle; guarda o estado (cor, pisca, vibração) e o envia numa thread,
   reconectando sozinho.
 - `instancia.py`: instância única via named pipe (ctypes, sem dependência extra).
-- `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\ds4-cli\config.json`,
+- `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\Faisca\config.json`,
   restauradas ao abrir o app.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
 - `testar_apagar.py`: testa jeitos de apagar a luz (com o app fechado).
 - `build.ps1`: build de produção com Nuitka (ver "Empacotamento").
 - Rodar em desenvolvimento: `.\.venv\Scripts\pythonw.exe app.py`
-- Log: `%LOCALAPPDATA%\ds4-cli\ds4.log`
+- Log: `%LOCALAPPDATA%\Faisca\faisca.log`
 
 ## Particularidades do controle (clone)
 
@@ -58,15 +61,15 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
 ## Empacotamento (decidido)
 
 - **Nuitka no modo pasta (`--standalone`)**, pelo binário mais rápido. **Nunca `--onefile`** (cria 2 processos).
-- **Um executável, um processo**: `ds4.exe`, sem console.
+- **Um executável, um processo**: `faisca.exe`, sem console.
 - No código: threads, nunca `multiprocessing`; na GUI, evitar `QtWebEngine` (cria processos auxiliares).
 - Em **desenvolvimento** é aceitável ter 2 processos (o `pythonw.exe` do venv é um lançador que abre o
   Python do sistema). Não otimizar isso; só a produção precisa de 1 processo.
-- Logs e configurações em `%LOCALAPPDATA%\ds4-cli\` (a pasta do programa pode não ser gravável).
+- Logs e configurações em `%LOCALAPPDATA%\Faisca\` (a pasta do programa pode não ser gravável).
 - **Como gerar:** `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt` e depois
-  `powershell -ExecutionPolicy Bypass -File .\build.ps1`. Saída: `build\ds4\ds4.exe` (a pasta inteira
+  `powershell -ExecutionPolicy Bypass -File .\build.ps1`. Saída: `build\faisca\faisca.exe` (a pasta inteira
   é o programa). Usa o MSVC do Visual Studio e `--lto=yes`; leva alguns minutos.
-- `--output-folder-name` do Nuitka não tem efeito aqui; o `build.ps1` renomeia o `*.dist` para `build\ds4`.
+- `--output-folder-name` do Nuitka não tem efeito aqui; o `build.ps1` renomeia o `*.dist` para `build\faisca`.
 - A declaração de DPI é feita em código (`declarar_dpi()` no `app.py`), porque o Nuitka não tem opção
   de manifesto para isso.
 - Primeiro build (Nuitka 4.3.4, wxPython 4.3.2): ~37 MB, 19 arquivos, ~40 MB de memória rodando.

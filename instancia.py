@@ -11,7 +11,7 @@ from ctypes import wintypes
 
 log = logging.getLogger(__name__)
 
-NOME_PIPE = rf"\\.\pipe\ds4-cli-{getpass.getuser()}"
+NOME_PIPE = rf"\\.\pipe\faisca-{getpass.getuser()}"
 
 PIPE_ACCESS_INBOUND = 0x00000001
 FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000

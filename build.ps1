@@ -1,4 +1,4 @@
-# Gera o build de produção com Nuitka: build\ds4\ds4.exe (modo pasta, sem console, um processo).
+﻿# Gera o build de produção com Nuitka: build\faisca\faisca.exe (modo pasta, sem console, um processo).
 # Requer: .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 $ErrorActionPreference = "Stop"
 $raiz = $PSScriptRoot
@@ -24,17 +24,17 @@ if ($LASTEXITCODE -ne 0) { throw "falha ao gerar o ícone" }
     --assume-yes-for-downloads `
     --windows-console-mode=disable `
     --windows-icon-from-ico="$icone" `
-    --product-name="Controle DS4" `
+    --product-name="Faísca" `
     --file-version=0.1.0 `
     --output-dir="$saida" `
-    --output-filename=ds4.exe `
+    --output-filename=faisca.exe `
     (Join-Path $raiz "app.py")
 if ($LASTEXITCODE -ne 0) { throw "falha no build do Nuitka" }
 
-# o Nuitka gera build\app.dist (ou ds4.dist); entrega como build\ds4
+# o Nuitka gera build\app.dist (ou faisca.dist); entrega como build\faisca
 $dist = Get-ChildItem $saida -Directory -Filter "*.dist" | Select-Object -First 1
-$final = Join-Path $saida "ds4"
+$final = Join-Path $saida "faisca"
 if (Test-Path $final) { Remove-Item $final -Recurse -Force }
-Rename-Item $dist.FullName "ds4"
+Rename-Item $dist.FullName "faisca"
 
-Write-Host "Build pronto: $(Join-Path $saida 'ds4\ds4.exe')"
+Write-Host "Build pronto: $(Join-Path $saida 'faisca\faisca.exe')"

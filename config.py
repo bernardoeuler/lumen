@@ -1,11 +1,25 @@
-"""Configurações do usuário (última cor, brilho, pisca, vibração), salvas em %LOCALAPPDATA%\\ds4-cli."""
+"""Configurações do usuário (última cor, brilho, pisca, vibração), salvas em %LOCALAPPDATA%\\Faisca."""
 import json
 import logging
 import os
 from pathlib import Path
 
-PASTA_DADOS = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ds4-cli"
+_BASE = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+PASTA_DADOS = _BASE / "Faisca"
 ARQUIVO = PASTA_DADOS / "config.json"
+
+# o app se chamava ds4-cli: leva a pasta antiga (config e log) para o nome novo
+_ANTIGA = _BASE / "ds4-cli"
+if not PASTA_DADOS.exists() and _ANTIGA.is_dir():
+    try:
+        _ANTIGA.rename(PASTA_DADOS)
+    except OSError:
+        # sem renomear (pasta em uso, por exemplo), ao menos traz as preferências
+        try:
+            PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+            (PASTA_DADOS / "config.json").write_bytes((_ANTIGA / "config.json").read_bytes())
+        except OSError:
+            pass
 
 PADRAO = {
     "cor": [0, 0, 255],
