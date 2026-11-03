@@ -47,7 +47,7 @@ jobs:
             -r requirements.txt pytest==8.3.5
 
       - name: Compilar todos os módulos
-        run: python -m compileall -q -x "[/\\]\.venv" .
+        run: python -m compileall -q app.py config.py controle.py gerenciador.py instancia.py instancia_unix.py instancia_windows.py preset.py versao.py tests
 
       - name: Testes (Windows)
         if: runner.os == 'Windows'
