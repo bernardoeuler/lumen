@@ -17,6 +17,9 @@ FLAG_FLASH = 0x04
 # o clone ignora a luz se a flag de vibração não vier junto (ver testar_luz.py),
 # então todo relatório leva todas as flags com o estado completo
 FLAGS_TUDO = FLAG_RUMBLE | FLAG_LIGHT | FLAG_FLASH
+# o clone mostra BRANCO quando recebe a cor (0, 0, 0), e não há comando que apague de vez
+# (ver testar_apagar.py); o mais perto de apagado que ele aceita é uma cor quase preta
+COR_APAGADA = (0, 0, 1)
 
 
 class ControleNaoEncontrado(Exception):
@@ -50,7 +53,7 @@ class DS4:
             raise ControleNaoEncontrado(f"Não consegui abrir o controle ({e}).") from e
 
     def send(self, rgb=(0, 0, 0), forte=0, fraco=0, flags=FLAGS_TUDO):
-        r, g, b = rgb
+        r, g, b = COR_APAGADA if tuple(rgb) == (0, 0, 0) else rgb
         if self.bluetooth:
             rep = bytearray(BT_REPORT_LEN)
             rep[0] = 0x11

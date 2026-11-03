@@ -67,6 +67,32 @@ def com_brilho(rgb, brilho):
     return tuple(round(c * brilho / 100) for c in rgb)
 
 
+def tom_apagado(rgb):
+    """O "apagado" possível no clone: a cor no menor brilho (cada canal aceso vira 1).
+
+    O clone mostra branco com (0, 0, 0) e não tem comando para apagar de vez; usar o tom mais
+    escuro da cor em uso faz o "apagado" combinar com ela, em vez de ser sempre o mesmo tom.
+    Devolve APAGADO para APAGADO (o controle.py então usa o tom padrão).
+    """
+    return tuple(1 if c else 0 for c in rgb)
+
+
+def sequencia_para_envio(passos, ligada, cor_base):
+    """Passos [r, g, b, s] como serão enviados: pausas viram o tom apagado da cor anterior."""
+    cores = [tuple(p[:3]) for p in passos]
+    acesas = [c for c in cores if c != APAGADO]
+    saida = []
+    for i, (cor, p) in enumerate(zip(cores, passos)):
+        if not ligada:
+            cor = tom_apagado(cor_base)
+        elif cor == APAGADO:
+            # cor acesa mais próxima antes desta (em ciclo); sem nenhuma, a cor da luz
+            anteriores = [c for c in cores[:i][::-1] + cores[i:][::-1] if c != APAGADO]
+            cor = tom_apagado(anteriores[0] if acesas else cor_base)
+        saida.append((cor, p[3]))
+    return saida
+
+
 def contorno(rgb):
     """Cor de borda que aparece tanto em cores claras quanto escuras."""
     return wx.Colour(*(int(c * 0.6) for c in rgb)) if sum(rgb) > 300 else wx.Colour(0, 0, 0, 60)
@@ -705,7 +731,8 @@ class Janela(wx.Frame):
 
     def aplicar_luz(self):
         efetiva = com_brilho(self.cor, self.slider_brilho.GetValue()) if self.ligada else APAGADO
-        self.g.luz(efetiva)
+        # na tela aparece "off"; no controle vai o tom mais escuro da cor (ver tom_apagado)
+        self.g.luz(efetiva if self.ligada else tom_apagado(self.cor))
         self.bt_ligar.SetValue(not self.ligada)
         self.bt_ligar.SetLabel("Acender" if not self.ligada else "Apagar")
         for b in self.bolinhas:
@@ -719,9 +746,8 @@ class Janela(wx.Frame):
 
     def aplicar_pisca(self):
         brilho = self.slider_brilho.GetValue()
-        efetivos = [(com_brilho((r, g, b), brilho) if self.ligada else APAGADO, seg)
-                    for r, g, b, seg in self.passos]
-        self.g.sequencia(efetivos)
+        com_brilho_aplicado = [[*com_brilho((r, g, b), brilho), seg] for r, g, b, seg in self.passos]
+        self.g.sequencia(sequencia_para_envio(com_brilho_aplicado, self.ligada, self.cor))
         if self.chk_piscar.IsChecked():
             self.g.piscar()
         else:

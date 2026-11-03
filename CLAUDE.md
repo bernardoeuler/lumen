@@ -13,6 +13,7 @@ luz, pisca e vibração. Um único programa com GUI, no modelo do DS4Windows.
   restauradas ao abrir o app.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
+- `testar_apagar.py`: testa jeitos de apagar a luz (com o app fechado).
 - `build.ps1`: build de produção com Nuitka (ver "Empacotamento").
 - Rodar em desenvolvimento: `.\.venv\Scripts\pythonw.exe app.py`
 - Log: `%LOCALAPPDATA%\ds4-cli\ds4.log`
@@ -24,6 +25,11 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
 - **Luz:** só funciona se o relatório Bluetooth (0x11) tiver o byte 2 = `0x00` e as **três flags** juntas
   (`0x07`: vibração, luz e pisca). Só a flag da luz é ignorada. Confirmado com `testar_luz.py`, com e sem Steam.
 - **Pisca por hardware** (bytes de aceso/apagado do relatório) é ignorado; o pisca é feito por software.
+- **Cor (0, 0, 0) deixa a luz BRANCA**, não apagada. Nenhum comando apaga de vez (`testar_apagar.py`:
+  flags sem luz e pisca de hardware são ignorados). O mais perto de apagado é uma cor com canais em 1
+  (brilho bem fraco). O `app.py` manda o **tom apagado da cor em uso** (`tom_apagado`: cada canal aceso
+  vira 1): no Apagar, o da cor da luz; nas pausas do pisca, o da cor acesa anterior. Se ainda chegar
+  (0, 0, 0) ao `controle.py`, ele usa `COR_APAGADA` = (0, 0, 1). Na tela, "apagado" continua (0, 0, 0).
 - Por isso todo relatório leva o estado completo (cor + motores).
 - **Steam aberta** sobrescreve a luz (Steam Input é dono do controle). Testar com ela fechada.
 
