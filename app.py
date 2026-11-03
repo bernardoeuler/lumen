@@ -8,6 +8,7 @@ Uso (desenvolvimento): .\.venv\Scripts\pythonw.exe app.py
 import ctypes
 import logging
 import math
+import os
 import sys
 
 import wx
@@ -15,6 +16,7 @@ import wx.adv
 
 import config
 import instancia
+import preset
 from gerenciador import Gerenciador
 
 TITULO = "Lumen"
@@ -260,6 +262,48 @@ class Bateria(wx.Control):
             gc.SetPen(wx.Pen(cor if sobre_cor else self.GetParent().GetBackgroundColour(), self.FromDIP(1)))
             gc.SetBrush(wx.Brush(wx.WHITE if sobre_cor else cinza))
             gc.DrawPath(raio)
+
+
+class BotaoMenu(wx.Control):
+    """Botão discreto de 'mais opções' (três pontinhos), sem borda: cinza parado, fundo suave e cor
+    de destaque sob o mouse. ao_clicar(botao) normalmente abre um menu logo abaixo dele."""
+
+    def __init__(self, pai, dica, ao_clicar):
+        super().__init__(pai, style=wx.BORDER_NONE)
+        self.sobre = False
+        self.SetToolTip(dica)
+        self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self.on_paint)
+        self.Bind(wx.EVT_LEFT_UP, lambda e: ao_clicar(self))
+        self.Bind(wx.EVT_ENTER_WINDOW, lambda e: self._sobre(True))
+        self.Bind(wx.EVT_LEAVE_WINDOW, lambda e: self._sobre(False))
+
+    def DoGetBestSize(self):
+        return self.FromDIP(wx.Size(26, 26))
+
+    def _sobre(self, valor):
+        self.sobre = valor
+        self.Refresh()
+
+    def on_paint(self, _):
+        dc = wx.AutoBufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        gc = wx.GraphicsContext.Create(dc)
+        w, h = self.GetClientSize()
+        destaque = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
+        if self.sobre:
+            gc.SetPen(wx.TRANSPARENT_PEN)
+            gc.SetBrush(wx.Brush(wx.Colour(destaque.Red(), destaque.Green(), destaque.Blue(), 40)))
+            gc.DrawRoundedRectangle(0, 0, w, h, self.FromDIP(6))
+        cor = destaque if self.sobre else wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        # três pontinhos na horizontal
+        gc.SetPen(wx.TRANSPARENT_PEN)
+        gc.SetBrush(wx.Brush(cor))
+        r, vao = 1.6 * self.GetDPIScaleFactor(), self.FromDIP(5)
+        for k in (-1, 0, 1):
+            gc.DrawEllipse(w / 2 + k * vao - r, h / 2 - r, 2 * r, 2 * r)
 
 
 class Previa(wx.Control):
@@ -771,7 +815,8 @@ class Janela(wx.Frame):
         self.status = wx.StaticText(painel, label="Procurando controle…")
         linha.Add(self.status, 1, wx.ALIGN_CENTER_VERTICAL)
         self.bateria = Bateria(painel)
-        linha.Add(self.bateria, 0, wx.ALIGN_CENTER_VERTICAL)
+        linha.Add(self.bateria, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
+        linha.Add(BotaoMenu(painel, "Mais opções", self.menu_opcoes), 0, wx.ALIGN_CENTER_VERTICAL)
         raiz.Add(linha, 0, wx.EXPAND | wx.ALL, m)
 
         # --- luz
@@ -957,6 +1002,7 @@ class Janela(wx.Frame):
         slider.Bind(wx.EVT_SLIDER, do_slider)
         campo.Bind(wx.EVT_SPINCTRL, do_campo)
         campo.Bind(wx.EVT_TEXT_ENTER, do_campo)
+        slider.campo = campo  # para mudar os dois juntos por código (ver aplicar_preset)
         return slider, linha
 
     @staticmethod
@@ -1179,6 +1225,92 @@ class Janela(wx.Frame):
             sincronizar=self.chk_sincronizar.IsChecked(),
         )
         config.salvar(self.cfg)
+
+    # --- presets (.lumen.json)
+
+    def menu_opcoes(self, botao):
+        """Menu do botão '⋯' do cabeçalho, aberto logo abaixo dele."""
+        menu = wx.Menu()
+        for rotulo, acao in (("Importar preset…", self.on_importar), ("Exportar preset…", self.on_exportar)):
+            self.Bind(wx.EVT_MENU, acao, menu.Append(wx.ID_ANY, rotulo))
+        botao.PopupMenu(menu, wx.Point(0, botao.GetSize().height))
+        menu.Destroy()
+        botao._sobre(False)  # o mouse saiu enquanto o menu estava aberto
+
+    CURINGA_PRESET =f"Preset do Lumen (*{preset.EXTENSAO})|*{preset.EXTENSAO}|JSON (*.json)|*.json"
+
+    def on_exportar(self, _):
+        with wx.FileDialog(self, "Exportar preset", wildcard=self.CURINGA_PRESET, defaultFile=f"meu preset{preset.EXTENSAO}",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            caminho = dlg.GetPath()
+        nome = os.path.basename(caminho)
+        for sufixo in (preset.EXTENSAO, ".json"):
+            if nome.lower().endswith(sufixo):
+                nome = nome[:-len(sufixo)]
+                break
+        self.salvar_config()  # deixa self.cfg igual à tela
+        try:
+            preset.salvar(caminho, self.cfg, nome)
+        except OSError as e:
+            wx.MessageBox(f"Não consegui salvar o preset.\n\n{e}", TITULO, wx.OK | wx.ICON_ERROR, self)
+            return
+        logging.info("preset exportado: %s", caminho)
+
+    def on_importar(self, _):
+        with wx.FileDialog(self, "Importar preset", wildcard=self.CURINGA_PRESET,
+                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            caminho = dlg.GetPath()
+        try:
+            mudancas, nome, avisos = preset.carregar(caminho)
+        except preset.PresetInvalido as e:
+            wx.MessageBox(f"Esse arquivo não pôde ser importado: {e}.\nNada foi alterado.",
+                          TITULO, wx.OK | wx.ICON_ERROR, self)
+            return
+        self.aplicar_preset(mudancas)
+        logging.info("preset importado: %s (%d campos, %d avisos)", caminho, len(mudancas), len(avisos))
+        if avisos:
+            wx.MessageBox(f"Preset “{nome or os.path.basename(caminho)}” importado, com avisos:\n\n• "
+                          + "\n• ".join(avisos), TITULO, wx.OK | wx.ICON_WARNING, self)
+
+    def aplicar_preset(self, m):
+        """Aplica as mudanças de um preset (chaves do config.py; só as presentes) na tela e no controle."""
+        for editor in (self.ed_cores, self.ed_vib):
+            if editor.detalhe:
+                editor.detalhe.fechar()
+        if "cor" in m:
+            self.cor = tuple(m["cor"])
+            self.ligada = True
+        for chave, slider in (("brilho", self.slider_brilho), ("forte", self.slider_forte),
+                              ("fraco", self.slider_fraco)):
+            if chave in m:
+                slider.SetValue(m[chave])
+                slider.campo.SetValue(m[chave])
+        if "duracao" in m:
+            self.spin_duracao.SetValue(m["duracao"])
+        for chave, caixa in (("piscar", self.chk_piscar), ("repetir_padrao", self.chk_repetir),
+                             ("sincronizar", self.chk_sincronizar)):
+            if chave in m:
+                caixa.SetValue(m[chave])
+        # as listas são compartilhadas com os editores: troca o conteúdo, não a lista
+        if "sequencia" in m:
+            self.passos[:] = [list(p) for p in m["sequencia"]]
+            self.ed_cores.faixa.atualizar()
+        if "padrao_vibracao" in m:
+            self.padrao[:] = [list(p) for p in m["padrao_vibracao"]]
+            self.ed_vib.faixa.atualizar()
+        self.reajustar()
+
+        self.g.repetir_padrao(self.chk_repetir.IsChecked())
+        self.g.parar_pisca()  # a sequência nova começa do primeiro passo
+        self.aplicar_luz()    # aplica também o pisca e agenda salvar
+        self.aplicar_padrao()
+        if self.chk_piscar.IsChecked() and self.chk_sincronizar.IsChecked():
+            self.g.tocar_padrao(self.chk_repetir.IsChecked(), com_pisca=True)
+        self.acompanhar()
 
     # --- janela e bandeja
 

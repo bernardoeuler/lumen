@@ -14,6 +14,9 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
 - `instancia.py`: instância única via named pipe (ctypes, sem dependência extra).
 - `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\Lumen\config.json`,
   restauradas ao abrir o app.
+- `preset.py`: import/export de presets `.lumen.json` (formato próprio, versão 1, documentado no topo do
+  arquivo): luz, pisca e vibração num documento, seções opcionais, chaves em inglês. Importação tolerante
+  (limita valores, descarta passos ruins, avisa); recusa o que não for preset do Lumen.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
 - `testar_apagar.py`: testa jeitos de apagar a luz (com o app fechado).
