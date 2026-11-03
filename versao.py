@@ -1,3 +1,3 @@
 """Versão do Lumen (versionamento semântico). A tag da release precisa ser "v" + VERSAO."""
-VERSAO = "1.0.3"
+VERSAO = "1.0.4"
 REPOSITORIO = "https://github.com/bernardoeuler/lumen"

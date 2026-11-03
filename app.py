@@ -199,10 +199,14 @@ class Bateria(wx.Control):
     """Pilha minimalista: contorno fino, preenchimento na cor do nível, raio no cabo, % ao lado."""
 
     def __init__(self, pai):
-        super().__init__(pai, style=wx.BORDER_NONE)
+        # no GTK a cor informada pelo pai difere do fundo do tema, e pintá-la deixaria um retângulo;
+        # o fundo transparente precisa ser definido antes de criar a janela
+        super().__init__()
+        self.transparente = sys.platform != "win32" and pai.IsTransparentBackgroundSupported()
+        self.SetBackgroundStyle(wx.BG_STYLE_TRANSPARENT if self.transparente else wx.BG_STYLE_PAINT)
+        self.Create(pai, style=wx.BORDER_NONE)
         self.porcentagem = None  # None = sem leitura (desconectado)
         self.no_cabo = False
-        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         self.Bind(wx.EVT_PAINT, self.on_paint)
 
     def DoGetBestSize(self):
@@ -221,11 +225,15 @@ class Bateria(wx.Control):
         self.Refresh()
 
     def on_paint(self, _):
-        self.desenhar(wx.AutoBufferedPaintDC(self))
-
-    def desenhar(self, dc):
+        if self.transparente:
+            self.desenhar(wx.PaintDC(self))
+            return
+        dc = wx.AutoBufferedPaintDC(self)
         dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
         dc.Clear()
+        self.desenhar(dc)
+
+    def desenhar(self, dc):
         if self.porcentagem is None:
             return
         gc = wx.GraphicsContext.Create(dc)
@@ -832,7 +840,7 @@ class Janela(wx.Frame):
         raiz = wx.BoxSizer(wx.VERTICAL)
         # coluna dos rótulos ("Motor forte", "Piscar"...): cabe o maior texto, com espaço para a caixa
         # de marcar; a fonte do GTK é maior que a do Windows, então não dá para fixar
-        rotulos = ("Motor forte", "Motor fraco", "Brilho (%)", "Padrão", "Piscar")
+        rotulos = ("Motor forte", "Motor fraco", "Brilho (%)", "Duração (s)", "Padrão", "Piscar")
         self.col = max(self.FromDIP(78),
                        max(painel.GetTextExtent(t).width for t in rotulos) + self.FromDIP(28))
 
@@ -915,14 +923,13 @@ class Janela(wx.Frame):
         caixa.Add(linha, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
 
         linha = wx.BoxSizer(wx.HORIZONTAL)
-        linha.Add(wx.StaticText(cx, label="Duração"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
+        linha.Add(wx.StaticText(cx, label="Duração (s)", size=wx.Size(self.col, -1)), 0, wx.ALIGN_CENTER_VERTICAL)
         self.spin_duracao = self._spin(cx, cfg["duracao"], 0.1, 10.0, 0.1)
         self.spin_duracao.Bind(wx.EVT_SPINCTRLDOUBLE, lambda ev: self.agendar_salvar())
-        linha.Add(self.spin_duracao, 0, wx.RIGHT, self.FromDIP(2))
-        linha.Add(wx.StaticText(cx, label="s"), 0, wx.ALIGN_CENTER_VERTICAL)
+        linha.Add(self.spin_duracao)
         linha.AddStretchSpacer()
         # cada botão vira "Parar" enquanto o que ele começou está tocando (ver acompanhar)
-        self.bt_vibrar = wx.Button(cx, label=self.ROTULO_VIBRAR, size=cx.FromDIP(wx.Size(110, -1)))
+        self.bt_vibrar = wx.Button(cx, label=self.ROTULO_VIBRAR)
         self.bt_vibrar.SetDefault()
         self.bt_vibrar.Bind(wx.EVT_BUTTON, self.on_vibrar)
         linha.Add(self.bt_vibrar)
@@ -963,11 +970,17 @@ class Janela(wx.Frame):
         self.chk_sincronizar.Bind(wx.EVT_CHECKBOX, lambda ev: self.agendar_salvar())
         linha.Add(self.chk_sincronizar, 0, wx.ALIGN_CENTER_VERTICAL)
         linha.AddStretchSpacer()
-        self.bt_tocar = wx.Button(cx, label=self.ROTULO_TOCAR, size=cx.FromDIP(wx.Size(110, -1)))
+        self.bt_tocar = wx.Button(cx, label=self.ROTULO_TOCAR)
         self.bt_tocar.Bind(wx.EVT_BUTTON, self.on_tocar)
         linha.Add(self.bt_tocar)
         caixa.Add(linha, 0, wx.EXPAND | wx.ALL, e)
         raiz.Add(caixa, 0, wx.EXPAND | wx.ALL, m)
+
+        # os dois botões têm a mesma largura e não mudam de tamanho ao virar "Parar"
+        largura = max(self.bt_tocar.GetBestSize().width, self.FromDIP(110))
+        largura = max(largura, self.bt_tocar.GetTextExtent(self.ROTULO_TOCAR).width + self.FromDIP(32))
+        for bt in (self.bt_vibrar, self.bt_tocar):
+            bt.SetMinSize(wx.Size(largura, -1))
 
         painel.SetSizer(raiz)
         raiz.SetSizeHints(self)
@@ -1114,7 +1127,7 @@ class Janela(wx.Frame):
         bolinha = Bolinha(painel, rgb, dica, lambda _: balao.acao(self.trocar_cor_passo, i))
         sub = "Pausa (apagada)" if rgb == APAGADO else "#{:02X}{:02X}{:02X}".format(*rgb)
         DetalhePasso.titulo(painel, raiz, bolinha, f"Passo {i + 1} de {len(self.passos)}", sub)
-        self._campos(painel, raiz, [("Duração", self._campo_duracao(painel, self.ed_cores, i, 3), "s")])
+        self._campos(painel, raiz, [("Duração (s)", self._campo_duracao(painel, self.ed_cores, i, 3), "")])
 
     def nova_cor(self):
         rgb = self.escolher_cor(self.cor)
@@ -1151,7 +1164,7 @@ class Janela(wx.Frame):
 
             self._ao_digitar(campo, int, 0, 255, digitou)
             campos.append((rotulo, campo, ""))
-        campos.append(("Duração", self._campo_duracao(painel, self.ed_vib, i, 2), "s"))
+        campos.append(("Duração (s)", self._campo_duracao(painel, self.ed_vib, i, 2), ""))
         self._campos(painel, raiz, campos)
 
     def aplicar_padrao(self):

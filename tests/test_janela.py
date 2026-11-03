@@ -138,6 +138,12 @@ def test_textos_cabem_nos_controles(janela):
     assert faixa.ch >= faixa.FromDIP(5) + faixa.d + faixa.FromDIP(4) + h
 
 
+def test_botoes_de_vibracao_tem_folga(janela):
+    for bt, rotulo in ((janela.bt_tocar, janela.ROTULO_TOCAR), (janela.bt_vibrar, janela.ROTULO_VIBRAR)):
+        assert bt.GetSize().width >= bt.GetTextExtent(rotulo).width + janela.FromDIP(32)
+    assert janela.bt_tocar.GetSize().width == janela.bt_vibrar.GetSize().width
+
+
 # --- luz
 
 def test_clicar_numa_cor_pronta_muda_a_luz(janela):
