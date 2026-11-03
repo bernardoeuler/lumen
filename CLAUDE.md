@@ -1,10 +1,10 @@
-# Faísca
+# Lumen
 
 Ferramenta para controlar um controle de PS4 **paralelo (clone)** conectado por Bluetooth no Windows:
 luz, pisca e vibração. Um único programa com GUI, no modelo do DS4Windows.
 
-Antes se chamava ds4-cli (a pasta local do projeto ainda tem esse nome). O `config.py` renomeia sozinho a
-pasta de dados antiga. Repositório: https://github.com/bernardoeuler/faisca
+Antes se chamou Faísca e, no começo, ds4-cli (a pasta local do projeto ainda tem esse nome). O `config.py` renomeia sozinho a
+pasta de dados antiga. Repositório: https://github.com/bernardoeuler/lumen
 
 ## Arquivos
 
@@ -12,7 +12,7 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/faisca
 - `gerenciador.py`: dono do controle; guarda o estado (cor, pisca, vibração) e o envia numa thread,
   reconectando sozinho.
 - `instancia.py`: instância única via named pipe (ctypes, sem dependência extra).
-- `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\Faisca\config.json`,
+- `config.py`: preferências do usuário (cor, brilho, pisca, vibração) em `%LOCALAPPDATA%\Lumen\config.json`,
   restauradas ao abrir o app.
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
@@ -20,7 +20,7 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/faisca
 - `testar_bateria.py`: lê os relatórios de entrada e mostra o byte de bateria (pode rodar com o app aberto).
 - `build.ps1`: build de produção com Nuitka (ver "Empacotamento").
 - Rodar em desenvolvimento: `.\.venv\Scripts\pythonw.exe app.py`
-- Log: `%LOCALAPPDATA%\Faisca\faisca.log`
+- Log: `%LOCALAPPDATA%\Lumen\lumen.log`
 
 ## Particularidades do controle (clone)
 
@@ -65,15 +65,15 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
 ## Empacotamento (decidido)
 
 - **Nuitka no modo pasta (`--standalone`)**, pelo binário mais rápido. **Nunca `--onefile`** (cria 2 processos).
-- **Um executável, um processo**: `faisca.exe`, sem console.
+- **Um executável, um processo**: `lumen.exe`, sem console.
 - No código: threads, nunca `multiprocessing`; na GUI, evitar `QtWebEngine` (cria processos auxiliares).
 - Em **desenvolvimento** é aceitável ter 2 processos (o `pythonw.exe` do venv é um lançador que abre o
   Python do sistema). Não otimizar isso; só a produção precisa de 1 processo.
-- Logs e configurações em `%LOCALAPPDATA%\Faisca\` (a pasta do programa pode não ser gravável).
+- Logs e configurações em `%LOCALAPPDATA%\Lumen\` (a pasta do programa pode não ser gravável).
 - **Como gerar:** `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt` e depois
-  `powershell -ExecutionPolicy Bypass -File .\build.ps1`. Saída: `build\faisca\faisca.exe` (a pasta inteira
+  `powershell -ExecutionPolicy Bypass -File .\build.ps1`. Saída: `build\lumen\lumen.exe` (a pasta inteira
   é o programa). Usa o MSVC do Visual Studio e `--lto=yes`; leva alguns minutos.
-- `--output-folder-name` do Nuitka não tem efeito aqui; o `build.ps1` renomeia o `*.dist` para `build\faisca`.
+- `--output-folder-name` do Nuitka não tem efeito aqui; o `build.ps1` renomeia o `*.dist` para `build\lumen`.
 - A declaração de DPI é feita em código (`declarar_dpi()` no `app.py`), porque o Nuitka não tem opção
   de manifesto para isso.
 - Primeiro build (Nuitka 4.3.4, wxPython 4.3.2): ~37 MB, 19 arquivos, ~40 MB de memória rodando.

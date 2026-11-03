@@ -1,4 +1,4 @@
-"""Faísca: programa com GUI (wxPython) que é o dono do controle DS4: luz, pisca e vibração.
+"""Lumen: programa com GUI (wxPython) que é o dono do controle DS4: luz, pisca e vibração.
 
 Fechar a janela minimiza para a bandeja; o programa só encerra pelo "Sair" no ícone da bandeja.
 Abrir o programa de novo só traz a janela da instância que já está rodando.
@@ -17,7 +17,7 @@ import config
 import instancia
 from gerenciador import Gerenciador
 
-TITULO = "Faísca"
+TITULO = "Lumen"
 
 PRESETS = [
     ("Vermelho", (255, 0, 0)),
@@ -1201,7 +1201,7 @@ def declarar_dpi():
 def configurar_log():
     config.PASTA_DADOS.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
-        filename=config.PASTA_DADOS / "faisca.log", encoding="utf-8", level=logging.INFO,
+        filename=config.PASTA_DADOS / "lumen.log", encoding="utf-8", level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
