@@ -96,6 +96,12 @@ def sequencia_para_envio(passos, ligada, cor_base):
     return saida
 
 
+def largura_campo(janela, dip):
+    """Tamanho de um campo numérico: largura fixa no Windows; no GTK o campo leva os botões +/- ao
+    lado e precisa do tamanho natural (senão corta o número)."""
+    return wx.Size(janela.FromDIP(dip) if sys.platform == "win32" else -1, -1)
+
+
 def segundos(s):
     """Duração curta para o rótulo de um passo: 0.5 -> '0,5 s'."""
     return f"{round(s, 2):g} s".replace(".", ",")
@@ -203,6 +209,10 @@ class Bateria(wx.Control):
 
     def definir(self, porcentagem, no_cabo):
         self.porcentagem, self.no_cabo = porcentagem, no_cabo
+        # sem leitura some de vez (no GTK, um controle vazio aparece como um retângulo de outra cor)
+        if self.IsShown() != (porcentagem is not None):
+            self.Show(porcentagem is not None)
+            self.GetParent().Layout()
         self.SetToolTip(None if porcentagem is None else
                         f"Bateria {porcentagem}%" + (" (carregando)" if no_cabo else ""))
         self.Refresh()
@@ -808,6 +818,11 @@ class Janela(wx.Frame):
         m = self.FromDIP(12)   # margem
         e = self.FromDIP(6)    # espaço entre itens
         raiz = wx.BoxSizer(wx.VERTICAL)
+        # coluna dos rótulos ("Motor forte", "Piscar"...): cabe o maior texto, com espaço para a caixa
+        # de marcar; a fonte do GTK é maior que a do Windows, então não dá para fixar
+        rotulos = ("Motor forte", "Motor fraco", "Brilho (%)", "Padrão", "Piscar")
+        self.col = max(self.FromDIP(78),
+                       max(painel.GetTextExtent(t).width for t in rotulos) + self.FromDIP(28))
 
         # --- cabeçalho: status da conexão
         linha = wx.BoxSizer(wx.HORIZONTAL)
@@ -816,6 +831,7 @@ class Janela(wx.Frame):
         self.status = wx.StaticText(painel, label="Procurando controle…")
         linha.Add(self.status, 1, wx.ALIGN_CENTER_VERTICAL)
         self.bateria = Bateria(painel)
+        self.bateria.Hide()  # aparece na primeira leitura
         linha.Add(self.bateria, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
         linha.Add(BotaoMenu(painel, "Mais opções", self.menu_opcoes), 0, wx.ALIGN_CENTER_VERTICAL)
         raiz.Add(linha, 0, wx.EXPAND | wx.ALL, m)
@@ -857,7 +873,7 @@ class Janela(wx.Frame):
         # cada passo: [r, g, b, segundos]; (0, 0, 0) é uma pausa com a luz apagada
         self.passos = [list(p) for p in cfg["sequencia"]]
         linha = wx.BoxSizer(wx.HORIZONTAL)
-        self.chk_piscar = wx.CheckBox(cx, label="Piscar", size=cx.FromDIP(wx.Size(78, -1)))
+        self.chk_piscar = wx.CheckBox(cx, label="Piscar", size=wx.Size(self.col, -1))
         self.chk_piscar.SetValue(cfg["piscar"])
         self.chk_piscar.Bind(wx.EVT_CHECKBOX, self.on_piscar)
         # alinhado ao centro da primeira fileira de bolinhas
@@ -905,7 +921,7 @@ class Janela(wx.Frame):
         # padrão de vibração: passos [forte, fraco, segundos], como a sequência do pisca
         self.padrao = [list(p) for p in cfg["padrao_vibracao"]]
         linha = wx.BoxSizer(wx.HORIZONTAL)
-        rotulo = wx.StaticText(cx, label="Padrão", size=cx.FromDIP(wx.Size(78, -1)))
+        rotulo = wx.StaticText(cx, label="Padrão", size=wx.Size(self.col, -1))
         linha.Add(rotulo, 0, wx.TOP, self.FromDIP(8))
         self.ed_vib = EditorSequencia(
             self, cx, self.padrao,
@@ -923,7 +939,7 @@ class Janela(wx.Frame):
         linha.Add(self.ed_vib.faixa)
         caixa.Add(linha, 0, wx.LEFT | wx.RIGHT, e)
         linha = wx.BoxSizer(wx.HORIZONTAL)
-        linha.AddSpacer(self.FromDIP(78))
+        linha.AddSpacer(self.col)
         self.chk_repetir = wx.CheckBox(cx, label="Repetir até parar")
         self.chk_repetir.SetValue(cfg["repetir_padrao"])
         self.chk_repetir.Bind(wx.EVT_CHECKBOX, self.on_repetir)
@@ -978,13 +994,13 @@ class Janela(wx.Frame):
         """Linha 'rótulo  [-----o----]  [valor]'. O valor pode ser arrastado ou digitado; os dois
         ficam sincronizados. Devolve (slider, sizer)."""
         linha = wx.BoxSizer(wx.HORIZONTAL)
-        texto = wx.StaticText(pai, label=rotulo, size=pai.FromDIP(wx.Size(78, -1)))
+        texto = wx.StaticText(pai, label=rotulo, size=wx.Size(self.col, -1))
         linha.Add(texto, 0, wx.ALIGN_CENTER_VERTICAL)
         slider = wx.Slider(pai, value=valor, minValue=minimo, maxValue=maximo,
                            size=pai.FromDIP(wx.Size(200, -1)))
         linha.Add(slider, 1, wx.ALIGN_CENTER_VERTICAL)
         campo = wx.SpinCtrl(pai, value=str(valor), min=minimo, max=maximo,
-                            size=pai.FromDIP(wx.Size(62, -1)), style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER)
+                            size=largura_campo(pai, 62), style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER)
         # o campo encosta na margem direita; a unidade vai no rótulo, para os campos ficarem alinhados
         linha.Add(campo, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, self.FromDIP(4))
         if sufixo:
@@ -1009,7 +1025,7 @@ class Janela(wx.Frame):
     @staticmethod
     def _spin(pai, valor, minimo, maximo, passo):
         s = wx.SpinCtrlDouble(pai, value=str(valor), min=minimo, max=maximo, inc=passo,
-                              size=pai.FromDIP(wx.Size(70, -1)))
+                              size=largura_campo(pai, 70))
         s.SetDigits(2)
         return s
 
@@ -1108,7 +1124,7 @@ class Janela(wx.Frame):
         campos = []
         for rotulo, indice in (("Motor forte", 0), ("Motor fraco", 1)):
             campo = wx.SpinCtrl(painel, value=str(passo[indice]), min=0, max=255,
-                                size=painel.FromDIP(wx.Size(70, -1)), style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER)
+                                size=largura_campo(painel, 70), style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER)
 
             def mudou(ev, campo=campo, indice=indice):
                 self.ed_vib.mudar_campo(i, indice, campo.GetValue())
