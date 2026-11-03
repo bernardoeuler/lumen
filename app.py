@@ -645,12 +645,16 @@ class EditorSequencia:
     ao_mudar(): chamado depois de qualquer alteração (aplicar no controle e salvar).
     """
 
-    def __init__(self, janela, pai, itens, desenhar, dica, rotulo, dica_adicionar, preencher, novos, ao_mudar):
+    def __init__(self, janela, pai, itens, desenhar, dica, rotulo, dica_adicionar, preencher, novos, ao_mudar,
+                 ao_mudar_ciclo=lambda: None):
+        """ao_mudar_ciclo(): chamado depois de adicionar, duplicar ou remover um passo (o ciclo
+        muda de tamanho)."""
         self.janela = janela
         self.itens = itens
         self.preencher = preencher
         self.novos = novos
         self.ao_mudar = ao_mudar
+        self.ao_mudar_ciclo = ao_mudar_ciclo
         self.detalhe = None
         self.faixa = Faixa(pai, itens, desenhar, dica, rotulo, dica_adicionar,
                            self.abrir_detalhe, self.arrastar, self.menu_adicionar)
@@ -699,6 +703,7 @@ class EditorSequencia:
         if passo is not None:
             self.itens.append(list(passo))
             self.alterar()
+            self.ao_mudar_ciclo()
 
     def arrastar(self, origem, insercao):
         """Solta o passo `origem` na posição `insercao` (0..len, contada antes de tirá-lo)."""
@@ -717,11 +722,13 @@ class EditorSequencia:
         """Insere uma cópia logo depois e abre o detalhe da cópia."""
         self.itens.insert(i + 1, list(self.itens[i]))
         self.alterar()
+        self.ao_mudar_ciclo()
         self.reabrir(i + 1)
 
     def remover(self, i):
         del self.itens[i]
         self.alterar()
+        self.ao_mudar_ciclo()
 
 
 class IconeBandeja(wx.adv.TaskBarIcon):
@@ -819,6 +826,7 @@ class Janela(wx.Frame):
             preencher=self.detalhe_cor,
             novos=[("Cor…", self.nova_cor), ("Pausa (apagada)", lambda: [*APAGADO, 0.5])],
             ao_mudar=self.aplicar_pisca,
+            ao_mudar_ciclo=self.ressincronizar,
         )
         linha.Add(self.ed_cores.faixa)
         caixa.Add(linha, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, e)
@@ -864,6 +872,7 @@ class Janela(wx.Frame):
                     lambda: [self.slider_forte.GetValue(), self.slider_fraco.GetValue(), 0.3]),
                    ("Pausa", lambda: [0, 0, 0.3])],
             ao_mudar=self.aplicar_padrao,
+            ao_mudar_ciclo=self.ressincronizar,
         )
         linha.Add(self.ed_vib.faixa)
         caixa.Add(linha, 0, wx.LEFT | wx.RIGHT, e)
@@ -1004,10 +1013,24 @@ class Janela(wx.Frame):
         campo.Bind(wx.EVT_TEXT, digitou)
 
     def _campo_duracao(self, painel, editor, i, indice):
+        def mudou(valor):
+            editor.mudar_campo(i, indice, valor)
+            self.ressincronizar()
+
         spin = self._spin(painel, editor.itens[i][indice], 0.05, 10.0, 0.05)
-        spin.Bind(wx.EVT_SPINCTRLDOUBLE, lambda ev: editor.mudar_campo(i, indice, ev.GetValue()))
-        self._ao_digitar(spin, float, 0.05, 10.0, lambda v: editor.mudar_campo(i, indice, v))
+        spin.Bind(wx.EVT_SPINCTRLDOUBLE, lambda ev: mudou(ev.GetValue()))
+        self._ao_digitar(spin, float, 0.05, 10.0, mudou)
         return spin
+
+    def ressincronizar(self):
+        """Com "Sincronizar com a luz", mudar uma duração ou adicionar, duplicar ou remover um passo
+        recomeça os dois juntos, como ao ligar o pisca (sem isso, o ciclo muda de tamanho e cada um
+        salta para um ponto qualquer)."""
+        if not self.chk_sincronizar.IsChecked():
+            return
+        if self.chk_piscar.IsChecked() or self.andamento[1] is not None:
+            self.g.tocar_padrao(self.chk_repetir.IsChecked(), com_pisca=True)
+            self.acompanhar()
 
     def detalhe_cor(self, balao, painel, raiz, i):
         r, g, b, _ = self.passos[i]
