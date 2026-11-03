@@ -37,11 +37,15 @@ mv "$saida"/*.dist "$saida/lumen"
 # toda instalação ou mudam de versão entre distribuições (ex.: libtiff.so.5 só existe até o Ubuntu
 # 22.04). Essas vão junto no pacote; as do núcleo (glibc, GTK, GLib, X11/Wayland, GL) continuam vindo
 # do sistema. Os binários já procuram bibliotecas em $ORIGIN (RPATH do Nuitka).
-incluir='lib(tiff|SDL2-2\.0|notify|secret-1|pcre2-32|jbig|deflate|Lerc)\.so'
+incluir='lib(tiff|SDL2-2\.0|notify|secret-1|pcre2-32|jbig|deflate|Lerc|Xxf86vm)\.so'
+# carregadas em tempo de execução (dlopen), então o ldd não as mostra: vão pelo nome
+extras=(libXxf86vm.so.1)
 for _ in 1 2 3; do  # repete para pegar as dependências das próprias bibliotecas incluídas
-    find "$saida/lumen" -type f \( -name '*.so*' -o -name lumen \) -exec ldd {} \; 2>/dev/null \
-        | awk '/=> \// { print $3 }' | sort -u | grep -E "/$incluir" \
-        | while read -r lib; do
+    {
+        find "$saida/lumen" -type f \( -name '*.so*' -o -name lumen \) -exec ldd {} \; 2>/dev/null \
+            | awk '/=> \// { print $3 }' | grep -E "/$incluir"
+        for nome in "${extras[@]}"; do ldconfig -p | awk -v n="$nome" '$1 == n && /x86-64/ { print $NF; exit }'; done
+    } | sort -u | while read -r lib; do
             nome="$(basename "$lib")"
             [[ -e "$saida/lumen/$nome" ]] && continue
             cp -L "$lib" "$saida/lumen/$nome"

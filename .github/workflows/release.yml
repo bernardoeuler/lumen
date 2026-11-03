@@ -107,7 +107,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends patchelf libgtk-3-0 libnotify4 libsdl2-2.0-0 libxtst6
+          sudo apt-get install -y --no-install-recommends patchelf libgtk-3-0 libnotify4 libsdl2-2.0-0 libxtst6 libxxf86vm1
           python -m pip install --only-binary wxPython \
             -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04/ \
             -r requirements-dev.txt
@@ -157,7 +157,7 @@ jobs:
         run: |
           tar -xzf lumen-*-linux-x86_64.tar.gz
           cd lumen-*-linux-x86_64/lumen
-          faltando="$(for x in ./lumen ./*.so* ./wx/*.so; do ldd "$x" 2>/dev/null | grep 'not found'; done | sort -u)"
+          faltando="$(find . -type f \( -name '*.so*' -o -name lumen \) -exec ldd {} \; 2>/dev/null | grep 'not found' | sort -u)"
           if [ -n "$faltando" ]; then
             echo "::error::Bibliotecas faltando em ${{ matrix.imagem }}:"
             echo "$faltando"
