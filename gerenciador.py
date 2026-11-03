@@ -81,8 +81,10 @@ class Estado:
 
 
 class Gerenciador:
-    def __init__(self, ao_mudar_conexao=None):
-        """ao_mudar_conexao(conectado, bluetooth) é chamado da thread do controle."""
+    def __init__(self, ao_mudar_conexao=None, ao_mudar_bateria=None):
+        """ao_mudar_conexao(conectado, bluetooth) e ao_mudar_bateria(porcentagem, no_cabo) são
+        chamados da thread do controle; a bateria vem como (None, False) ao desconectar."""
+        self._ao_mudar_bateria = ao_mudar_bateria or (lambda porcentagem, no_cabo: None)
         self._estado = Estado()
         self._trava = threading.Lock()
         self._parar = threading.Event()
@@ -132,12 +134,19 @@ class Gerenciador:
         with self._trava:
             self._estado.padrao = [(int(f), int(r), float(s)) for f, r, s in passos]
 
-    def tocar_padrao(self, repetir):
-        """Toca o padrão do início; uma vez, ou em ciclo até parar_vibracao() se repetir."""
+    def tocar_padrao(self, repetir, com_pisca=False):
+        """Toca o padrão do início; uma vez, ou em ciclo até parar_vibracao() se repetir.
+
+        com_pisca: se o pisca está ligado, ele também volta ao primeiro passo, no mesmo instante
+        (os dois começam juntos e depois cada um segue o próprio ciclo).
+        """
         with self._trava:
+            agora = time.monotonic()
             self._estado.vibra_ate = 0.0
             self._estado.padrao_repetir = repetir
-            self._estado.padrao_inicio = time.monotonic()
+            self._estado.padrao_inicio = agora
+            if com_pisca and self._estado.pisca_inicio is not None:
+                self._estado.pisca_inicio = agora
 
     def repetir_padrao(self, repetir):
         with self._trava:
@@ -159,6 +168,7 @@ class Gerenciador:
         ds4 = None
         ultimo = None
         ultimo_envio = 0.0
+        bateria = None
         while not self._parar.is_set():
             if ds4 is None:
                 try:
@@ -181,9 +191,20 @@ class Gerenciador:
                     ds4.close()
                     ds4 = None
                     self._ao_mudar_conexao(False, None)
+                    if bateria is not None:
+                        bateria = None
+                        self._ao_mudar_bateria(None, False)
                     continue
                 ultimo = atual
                 ultimo_envio = agora
+            try:
+                lida = ds4.ler_bateria()
+            except (OSError, ValueError):
+                lida = None  # a desconexão é tratada no próximo envio
+            if lida is not None and lida != bateria:
+                bateria = lida
+                log.info("bateria %d%%%s", lida[0], " (no cabo)" if lida[1] else "")
+                self._ao_mudar_bateria(*lida)
             self._parar.wait(TICK)
 
         if ds4 is not None:

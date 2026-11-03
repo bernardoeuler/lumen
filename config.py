@@ -33,6 +33,7 @@ PADRAO = {
     # padrão de vibração: [forte, fraco, segundos]; [0, 0, s] é uma pausa
     "padrao_vibracao": [[255, 0, 0.3], [0, 0, 0.2], [0, 255, 0.3]],
     "repetir_padrao": False,
+    "sincronizar": False,  # pisca e padrão de vibração começam juntos
 }
 
 log = logging.getLogger(__name__)

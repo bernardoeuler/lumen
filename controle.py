@@ -51,6 +51,26 @@ class DS4:
             self.dev.open_path(info["path"])
         except OSError as e:
             raise ControleNaoEncontrado(f"Não consegui abrir o controle ({e}).") from e
+        self.dev.set_nonblocking(True)
+
+    def ler_bateria(self):
+        """Esvazia os relatórios de entrada pendentes e devolve (porcentagem, no_cabo) do mais
+        recente, ou None se não chegou nenhum. Não bloqueia.
+
+        O status fica no byte 32 do relatório Bluetooth (0x11) e no 30 do USB (0x01): nível nos
+        4 bits de baixo (0..10; até 11 carregando) e 0x10 = cabo conectado (ver testar_bateria.py).
+        """
+        status = None
+        pos = 32 if self.bluetooth else 30
+        for _ in range(64):  # o controle manda ~150 relatórios/s; limite só por segurança
+            rep = self.dev.read(128)
+            if not rep:
+                break
+            if rep[0] in (0x11, 0x01) and len(rep) > pos:
+                status = rep[pos]
+        if status is None:
+            return None
+        return min(status & 0x0F, 10) * 10, bool(status & 0x10)
 
     def send(self, rgb=(0, 0, 0), forte=0, fraco=0, flags=FLAGS_TUDO):
         r, g, b = COR_APAGADA if tuple(rgb) == (0, 0, 0) else rgb

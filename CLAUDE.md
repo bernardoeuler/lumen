@@ -17,6 +17,7 @@ pasta de dados antiga. Repositório: https://github.com/bernardoeuler/faisca
 - `controle.py`: acesso HID de baixo nível (achar, abrir, montar e enviar o relatório de saída).
 - `testar_luz.py`: testa variantes do relatório de luz direto no HID (com o app fechado).
 - `testar_apagar.py`: testa jeitos de apagar a luz (com o app fechado).
+- `testar_bateria.py`: lê os relatórios de entrada e mostra o byte de bateria (pode rodar com o app aberto).
 - `build.ps1`: build de produção com Nuitka (ver "Empacotamento").
 - Rodar em desenvolvimento: `.\.venv\Scripts\pythonw.exe app.py`
 - Log: `%LOCALAPPDATA%\Faisca\faisca.log`
@@ -34,6 +35,9 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
   vira 1): no Apagar, o da cor da luz; nas pausas do pisca, o da cor acesa anterior. Se ainda chegar
   (0, 0, 0) ao `controle.py`, ele usa `COR_APAGADA` = (0, 0, 1). Na tela, "apagado" continua (0, 0, 0).
 - Por isso todo relatório leva o estado completo (cor + motores).
+- **Bateria:** como no DS4 original, byte 32 do relatório de entrada Bluetooth (0x11; 30 no USB 0x01):
+  nível nos 4 bits de baixo (0..10, 10 = cheia) e 0x10 = cabo. O controle só manda o 0x11 depois de
+  receber relatórios de saída, o que o app faz o tempo todo. Leitura sem bloquear em `DS4.ler_bateria()`.
 - **Steam aberta** sobrescreve a luz (Steam Input é dono do controle). Testar com ela fechada.
 
 ## Arquitetura (decidida, modelo DS4Windows)
@@ -53,7 +57,7 @@ Ele se identifica como DualShock 4 v2 da Sony: VID `054C`, PID `09CC`.
 - Layout: evitar `wx.WrapSizer` dentro de `StaticBox` (calcula mal a altura e esconde o que quebra
   linha). Tamanhos fixos sempre com `FromDIP`. Bolinhas de cor, prévia e indicador são desenhados à mão
   (`wx.GraphicsContext`), para terem forma redonda e anel de seleção.
-- **Escopo atual: só luz, pisca e vibração.** Não implementar remapeamento nem gráficos sem pedido.
+- **Escopo atual: só luz, pisca, vibração e indicador de bateria.** Não implementar remapeamento nem gráficos sem pedido.
   Se o projeto crescer para isso, reavaliar PySide6 + pyqtgraph; o remapeamento exigiria ler a entrada
   do controle, um controle de Xbox virtual (ViGEmBus, já instalado, via `vgamepad`) e esconder o
   controle real (HidHide, não instalado).

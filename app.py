@@ -185,6 +185,83 @@ class Indicador(wx.Control):
         gc.DrawEllipse(1, 1, w - 2, h - 2)
 
 
+class Bateria(wx.Control):
+    """Pilha minimalista: contorno fino, preenchimento na cor do nível, raio no cabo, % ao lado."""
+
+    def __init__(self, pai):
+        super().__init__(pai, style=wx.BORDER_NONE)
+        self.porcentagem = None  # None = sem leitura (desconectado)
+        self.no_cabo = False
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self.on_paint)
+
+    def DoGetBestSize(self):
+        return self.FromDIP(wx.Size(64, 16))
+
+    def definir(self, porcentagem, no_cabo):
+        self.porcentagem, self.no_cabo = porcentagem, no_cabo
+        self.SetToolTip(None if porcentagem is None else
+                        f"Bateria {porcentagem}%" + (" (carregando)" if no_cabo else ""))
+        self.Refresh()
+
+    def on_paint(self, _):
+        self.desenhar(wx.AutoBufferedPaintDC(self))
+
+    def desenhar(self, dc):
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        if self.porcentagem is None:
+            return
+        gc = wx.GraphicsContext.Create(dc)
+        w, h = self.GetClientSize()
+        cinza = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        p = self.porcentagem
+
+        # texto à esquerda, pilha encostada à direita
+        gc.SetFont(self.GetFont(), cinza)
+        texto = f"{p}%"
+        tw, th = gc.GetTextExtent(texto)
+        corpo_w, corpo_h = self.FromDIP(22), self.FromDIP(11)
+        bico_w = self.FromDIP(2)
+        x = w - corpo_w - bico_w - 1
+        y = (h - corpo_h) / 2
+        gc.DrawText(texto, x - self.FromDIP(5) - tw, (h - th) / 2)
+
+        gc.SetPen(wx.Pen(cinza, self.FromDIP(1)))
+        gc.SetBrush(wx.TRANSPARENT_BRUSH)
+        gc.DrawRoundedRectangle(x, y, corpo_w, corpo_h, self.FromDIP(3))
+        gc.SetPen(wx.TRANSPARENT_PEN)
+        gc.SetBrush(wx.Brush(cinza))
+        gc.DrawRoundedRectangle(x + corpo_w, y + corpo_h * 0.3, bico_w, corpo_h * 0.4, 1)
+
+        if p > 30 or self.no_cabo:
+            cor = COR_CONECTADO
+        elif p > 10:
+            cor = wx.Colour(230, 160, 0)
+        else:
+            cor = wx.Colour(215, 50, 50)
+        folga = self.FromDIP(2)
+        cheio = (corpo_w - 2 * folga) * max(p, 5) / 100  # vazio ainda mostra um tiquinho
+        gc.SetBrush(wx.Brush(cor))
+        gc.DrawRoundedRectangle(x + folga, y + folga, cheio, corpo_h - 2 * folga, self.GetDPIScaleFactor() * 1.5)
+
+        if self.no_cabo:
+            # raio no meio da pilha, com borda na cor do fundo para destacar do preenchimento
+            cx, cy, a = x + corpo_w / 2, y + corpo_h / 2, corpo_h * 0.42
+            raio = gc.CreatePath()
+            raio.MoveToPoint(cx + a * 0.25, cy - a)
+            raio.AddLineToPoint(cx - a * 0.45, cy + a * 0.12)
+            raio.AddLineToPoint(cx - a * 0.02, cy + a * 0.12)
+            raio.AddLineToPoint(cx - a * 0.25, cy + a)
+            raio.AddLineToPoint(cx + a * 0.45, cy - a * 0.12)
+            raio.AddLineToPoint(cx + a * 0.02, cy - a * 0.12)
+            raio.CloseSubpath()
+            sobre_cor = x + folga + cheio >= cx  # o preenchimento chega ao meio?
+            gc.SetPen(wx.Pen(cor if sobre_cor else self.GetParent().GetBackgroundColour(), self.FromDIP(1)))
+            gc.SetBrush(wx.Brush(wx.WHITE if sobre_cor else cinza))
+            gc.DrawPath(raio)
+
+
 class Previa(wx.Control):
     """Retângulo arredondado com a cor que está indo para o controle."""
 
@@ -686,6 +763,8 @@ class Janela(wx.Frame):
         linha.Add(self.indicador, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, e)
         self.status = wx.StaticText(painel, label="Procurando controle…")
         linha.Add(self.status, 1, wx.ALIGN_CENTER_VERTICAL)
+        self.bateria = Bateria(painel)
+        linha.Add(self.bateria, 0, wx.ALIGN_CENTER_VERTICAL)
         raiz.Add(linha, 0, wx.EXPAND | wx.ALL, m)
 
         # --- luz
@@ -727,7 +806,7 @@ class Janela(wx.Frame):
         linha = wx.BoxSizer(wx.HORIZONTAL)
         self.chk_piscar = wx.CheckBox(cx, label="Piscar", size=cx.FromDIP(wx.Size(78, -1)))
         self.chk_piscar.SetValue(cfg["piscar"])
-        self.chk_piscar.Bind(wx.EVT_CHECKBOX, lambda ev: self.aplicar_pisca())
+        self.chk_piscar.Bind(wx.EVT_CHECKBOX, self.on_piscar)
         # alinhado ao centro da primeira fileira de bolinhas
         linha.Add(self.chk_piscar, 0, wx.TOP, self.FromDIP(8))
         self.ed_cores = EditorSequencia(
@@ -793,7 +872,13 @@ class Janela(wx.Frame):
         self.chk_repetir = wx.CheckBox(cx, label="Repetir até parar")
         self.chk_repetir.SetValue(cfg["repetir_padrao"])
         self.chk_repetir.Bind(wx.EVT_CHECKBOX, self.on_repetir)
-        linha.Add(self.chk_repetir, 0, wx.ALIGN_CENTER_VERTICAL)
+        linha.Add(self.chk_repetir, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, m)
+        self.chk_sincronizar = wx.CheckBox(cx, label="Sincronizar com a luz")
+        self.chk_sincronizar.SetToolTip("Ligar o pisca ou tocar o padrão faz os dois começarem no mesmo "
+                                        "instante; depois cada um segue o próprio ciclo.")
+        self.chk_sincronizar.SetValue(cfg["sincronizar"])
+        self.chk_sincronizar.Bind(wx.EVT_CHECKBOX, lambda ev: self.agendar_salvar())
+        linha.Add(self.chk_sincronizar, 0, wx.ALIGN_CENTER_VERTICAL)
         linha.AddStretchSpacer()
         self.bt_tocar = wx.Button(cx, label=self.ROTULO_TOCAR, size=cx.FromDIP(wx.Size(110, -1)))
         self.bt_tocar.Bind(wx.EVT_BUTTON, self.on_tocar)
@@ -993,9 +1078,9 @@ class Janela(wx.Frame):
             b.selecionar(b.rgb == self.cor)
         self.previa.definir(efetiva)
         self.hex.SetLabel("#{:02X}{:02X}{:02X}".format(*self.cor))
-        icone = criar_icone(efetiva)
-        self.SetIcon(icone)
-        self.bandeja.SetIcon(icone, TITULO)
+        self.icone = criar_icone(efetiva)
+        self.SetIcon(self.icone)
+        self._atualizar_bandeja()
         self.aplicar_pisca()  # o brilho e o Apagar valem também para a sequência
 
     def aplicar_pisca(self):
@@ -1015,16 +1100,37 @@ class Janela(wx.Frame):
             self.g.vibrar(self.slider_forte.GetValue(), self.slider_fraco.GetValue(), self.spin_duracao.GetValue())
         self.acompanhar()
 
+    def on_piscar(self, _):
+        self.aplicar_pisca()
+        if self.chk_piscar.IsChecked() and self.chk_sincronizar.IsChecked():
+            # o pisca acabou de começar: o padrão começa no mesmo instante
+            self.g.tocar_padrao(self.chk_repetir.IsChecked(), com_pisca=True)
+            self.acompanhar()
+
     def on_tocar(self, _):
         if self.andamento[1] is not None:
             self.g.parar_vibracao()
         else:
-            self.g.tocar_padrao(self.chk_repetir.IsChecked())
+            self.g.tocar_padrao(self.chk_repetir.IsChecked(), com_pisca=self.chk_sincronizar.IsChecked())
         self.acompanhar()
 
     def conexao_mudou(self, conectado, bluetooth):
         """Chamado da thread do controle; só mexe na GUI via wx.CallAfter."""
         wx.CallAfter(self._mostrar_conexao, conectado, bluetooth)
+
+    def bateria_mudou(self, porcentagem, no_cabo):
+        """Chamado da thread do controle; só mexe na GUI via wx.CallAfter."""
+        wx.CallAfter(self._mostrar_bateria, porcentagem, no_cabo)
+
+    def _mostrar_bateria(self, porcentagem, no_cabo):
+        self.bateria.definir(porcentagem, no_cabo)
+        self._atualizar_bandeja()
+
+    def _atualizar_bandeja(self):
+        """Ícone na cor da luz; a dica do ícone mostra a bateria."""
+        p = self.bateria.porcentagem
+        dica = TITULO if p is None else f"{TITULO}: bateria {p}%" + (" (carregando)" if self.bateria.no_cabo else "")
+        self.bandeja.SetIcon(self.icone, dica)
 
     def _mostrar_conexao(self, conectado, bluetooth):
         if conectado:
@@ -1047,6 +1153,7 @@ class Janela(wx.Frame):
             forte=self.slider_forte.GetValue(), fraco=self.slider_fraco.GetValue(),
             duracao=self.spin_duracao.GetValue(),
             padrao_vibracao=[list(p) for p in self.padrao], repetir_padrao=self.chk_repetir.IsChecked(),
+            sincronizar=self.chk_sincronizar.IsChecked(),
         )
         config.salvar(self.cfg)
 
@@ -1114,7 +1221,8 @@ def main():
     app = wx.App()
     janela = None
 
-    g = Gerenciador(ao_mudar_conexao=lambda c, bt: janela and janela.conexao_mudou(c, bt))
+    g = Gerenciador(ao_mudar_conexao=lambda c, bt: janela and janela.conexao_mudou(c, bt),
+                    ao_mudar_bateria=lambda p, cabo: janela and janela.bateria_mudou(p, cabo))
     janela = Janela(g, config.carregar())
     logging.info("escala da tela: %.0f%%", janela.GetDPIScaleFactor() * 100)
 
