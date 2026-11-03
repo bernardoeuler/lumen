@@ -18,18 +18,28 @@ log = logging.getLogger(__name__)
 class Estado:
     def __init__(self):
         self.rgb = APAGADO
-        self.pisca = None       # (aceso, apagado, inicio)
+        self.passos = []           # sequência do pisca: [(rgb, segundos), ...]; APAGADO = pausa
+        self.pisca_inicio = None   # None = sem pisca (luz fixa em rgb)
         self.forte = 0
         self.fraco = 0
         self.vibra_ate = 0.0
 
+    def cor_da_sequencia(self, agora):
+        total = sum(seg for _, seg in self.passos)
+        if total <= 0:
+            return self.rgb
+        t = (agora - self.pisca_inicio) % total
+        for cor, seg in self.passos:
+            if t < seg:
+                return cor
+            t -= seg
+        return self.passos[-1][0]  # arredondamento no fim do ciclo
+
     def saida(self, agora):
         """O que o controle deve mostrar neste instante: (rgb, forte, fraco)."""
         rgb = self.rgb
-        if self.pisca:
-            aceso, apagado, inicio = self.pisca
-            if (agora - inicio) % (aceso + apagado) >= aceso:
-                rgb = APAGADO
+        if self.pisca_inicio is not None and self.passos:
+            rgb = self.cor_da_sequencia(agora)
         if agora < self.vibra_ate:
             return rgb, self.forte, self.fraco
         return rgb, 0, 0
@@ -50,7 +60,7 @@ class Gerenciador:
     def encerrar(self):
         """Para os motores e mantém a cor da luz (o controle guarda sozinho)."""
         with self._trava:
-            self._estado.pisca = None
+            self._estado.pisca_inicio = None
             self._estado.vibra_ate = 0.0
         self._parar.set()
         self._thread.join(timeout=2)
@@ -59,14 +69,20 @@ class Gerenciador:
         with self._trava:
             self._estado.rgb = tuple(rgb)
 
-    def piscar(self, aceso, apagado):
-        """Pisca na cor atual até parar_pisca()."""
+    def sequencia(self, passos):
+        """Define a sequência do pisca: [(rgb, segundos), ...]. Não reinicia o ciclo em andamento."""
         with self._trava:
-            self._estado.pisca = (aceso, apagado, time.monotonic())
+            self._estado.passos = [(tuple(rgb), float(seg)) for rgb, seg in passos]
+
+    def piscar(self):
+        """Começa a percorrer a sequência em ciclo, até parar_pisca(). Se já está piscando, não faz nada."""
+        with self._trava:
+            if self._estado.pisca_inicio is None:
+                self._estado.pisca_inicio = time.monotonic()
 
     def parar_pisca(self):
         with self._trava:
-            self._estado.pisca = None
+            self._estado.pisca_inicio = None
 
     def vibrar(self, forte, fraco, segundos):
         with self._trava:
